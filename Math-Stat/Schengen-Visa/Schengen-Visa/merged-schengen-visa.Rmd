@@ -1,0 +1,688 @@
+---
+title: "R Notebook"
+author: "Jiachen Feng, Ryan O'Dea, Simu Huang, Haoran Su, Minqi Li"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(Warning = FALSE)
+pacman::p_load(tidyverse,
+               magrittr,
+               ggrepel,
+               ggforce,
+               gganimate,
+               corrplot,
+               data.table,
+               transformr,
+               stringr,
+               readxl,
+               devtools)
+
+```
+
+## Data Cleaning
+```{r, eval=FALSE}
+top40 <- read_excel("Mini case studies top 40 edit.xlsx", 
+                    sheet = "Sheet1")
+HPI <- read.csv(file="tabfolder/global_ranking_2019.tab", header=T)
+
+top40$Country <- str_c(top40$Country,' ')
+
+top40 %>% inner_join(HPI,by=c("Country" = "country"))
+df <- top40 %>% left_join(HPI, by = c("Country" = "country"))
+
+colnames(df)[3] <- "development_level"
+colnames(df)[4] <- "population"
+colnames(df)[5] <- "territory"
+colnames(df)[6] <- "world_region"
+colnames(df)[7] <- "dominant_religion"
+colnames(df)[8] <- "freedom_house_ranking"
+
+df <- df[-c(39:43),]
+
+
+df %<>% separate(population, c("population", "e1"), sep = "[(]" )
+df %<>% select(-e1)
+df %<>% separate(territory, c("territory", "f1"), sep = "[ ]" )
+df %<>% select(-f1)
+
+df$population <- str_trim(df$population, side = c("both", "left", "right"))
+df$territory <- str_trim(df$territory, side = c("both", "left", "right"))
+df$territory <- str_replace(df$territory, ",","")
+df$population <- str_replace(df$population, ",","")
+
+df$territory <- str_replace(df$territory, ",","")
+df$population <- str_replace(df$population, ",","")
+
+df$territory <- as.numeric(df$territory)
+df$population <- as.numeric(df$population)
+
+write.csv(df, "df.csv")
+```
+
+```{r}
+df<-read.csv(file="df.csv",header = T)
+df$continent <-  c("Asia", "Asia", "Europe", "Africa", "Africa","Europe", "Europe","South America", "Europe", "Europe", "South America", "North America", "North America","Europe", "North America","Oceania", "North America","North America","North America","Asia", "Oceania", "North America", "Europe","Oceania", "North America","North America", "Asia", "Oceania", "Europe","Oceania","Oceania","Europe","Oceania", "Europe", "Europe","Europe", "Asia", "NA")
+
+df$log_p <- log(df$population)
+df$world_region <- as.factor(df$world_region)
+df <- na.omit(df)
+```
+
+```{r}
+# merge fsi, gni and mobility score table
+fsi_18<-fread(file="fsi-2018.csv",header = T)
+GNI<-fread(file="GNI.csv",header = T)
+
+# Update country names
+fsi_18$Country[fsi_18$Country=="Brunei Darussalam"] <- "Brunei"
+fsi_18$Country[fsi_18$Country=="Congo Democratic Republic"] <- "Congo (Dem. Rep.)"
+fsi_18$Country[fsi_18$Country=="Congo Republic"] <- "Congo (Rep.)"
+fsi_18$Country[fsi_18$Country=="Cote d'Ivoire"] <- "Cote d'Ivoire (Ivory Coast)"
+fsi_18$Country[fsi_18$Country=="Guinea Bissau"] <- "Guinea-Bissau	"
+fsi_18$Country[fsi_18$Country=="Israel and West Bank"] <- "Israel"
+fsi_18$Country[fsi_18$Country=="Kyrgyz Republic"] <- "Kyrgyzstan"
+fsi_18$Country[fsi_18$Country=="Lao PDR"] <- "Laos"
+fsi_18$Country[fsi_18$Country=="Russia"] <- "Russian Federation"
+fsi_18$Country[fsi_18$Country=="Timor-Leste"] <- "Timor Leste"
+fsi_18$Country[fsi_18$Country=="Cape Verde"] <- "Cape Verde Islands"
+fsi_18$Country[fsi_18$Country=="Comoros"] <- "Comores Islands"
+fsi_18$Country[fsi_18$Country=="Slovak Republic"] <- "Slovakia"
+fsi_18$Country[fsi_18$Country=="Timor Leste"] <- "Timor-Leste"
+
+GNI$country[GNI$country=="Bahamas, The"] <- "Bahamas"
+GNI$country[GNI$country=="Brunei Darussalam"] <- "Brunei"
+GNI$country[GNI$country=="Cabo Verde"] <- "Cape Verde"
+GNI$country[GNI$country=="Congo, Dem. Rep."] <- "Congo (Dem. Rep.)"
+GNI$country[GNI$country=="Congo, Rep."] <- "Congo (Rep.)"
+GNI$country[GNI$country=="Cote d'Ivoire"] <- "Cote d'Ivoire (Ivory Coast)"
+GNI$country[GNI$country=="Egypt, Arab Rep."] <- "Egypt"
+GNI$country[GNI$country=="Eswatini"] <- "eSwatini"
+GNI$country[GNI$country=="Gambia, The"] <- "Gambia"
+GNI$country[GNI$country=="Hong Kong SAR, China"] <- "Hong Kong (SAR China)"
+GNI$country[GNI$country=="Iran, Islamic Rep."] <- "Iran"
+GNI$country[GNI$country=="Kyrgyz Republic"] <- "Kyrgyzstan"
+GNI$country[GNI$country=="Lao PDR"] <- "Laos"
+GNI$country[GNI$country=="Macao SAR, China"] <- "Macao (SAR China)"
+GNI$country[GNI$country=="Micronesia, Fed. Sts."] <- "Micronesia"
+GNI$country[GNI$country=="Korea, Dem. People’s Rep."] <- "North Korea"
+GNI$country[GNI$country=="Slovak Republic"] <- "Slovakia"
+GNI$country[GNI$country=="Korea, Rep."] <- "South Korea"
+GNI$country[GNI$country=="Syrian Arab Republic"] <- "Syria"
+GNI$country[GNI$country=="Timor-Leste"] <- "Timor Leste"
+GNI$country[GNI$country=="Venezuela, RB"] <- "Venezuela"
+GNI$country[GNI$country=="Yemen, Rep."] <- "Yemen"
+
+
+# data cleaning 
+fsi_data <- filter(fsi_18,Year==2018) %>% 
+  select(Country,Total)
+fsi_data$Country <- str_c(fsi_data$Country,' ')
+
+GNI_data <- filter(GNI,year==2018) %>% 
+  select(country,gni)
+GNI_data$country <- str_c(GNI_data$country,' ')
+
+# Merge two dataset
+df %<>% left_join(fsi_data,by=c("Country"="Country")) 
+df %<>% left_join(GNI_data,by=c("Country"="country"))
+df %<>% rename(fsi=Total,Schengen_waiver=Schengen.Visa.waiver.Y.N..date.)
+df %<>% select(-Change.in.mobility.score..2006.2019.)
+
+# replace na with mean
+df[is.na(df$fsi),"fsi"]<-round(mean(df$fsi,na.rm = T),1)
+df[is.na(df$gni),"gni"]<-round(mean(df$gni,na.rm = T),1)
+```
+
+## EDA
+### Correlation
+```{r}
+df_cor<-df %>% select(access,population,territory,fsi,gni)
+
+df_cor$access <- (df_cor$access-mean(df_cor$access))/sd(df_cor$access)
+df_cor$population <- (df_cor$population-mean(df_cor$population))/sd(df_cor$population)
+df_cor$territory <- (df_cor$territory-mean(df_cor$territory))/sd(df_cor$territory)
+df_cor$fsi <- (df_cor$fsi-mean(df_cor$fsi))/sd(df_cor$fsi)
+df_cor$gni <- (df_cor$gni-mean(df_cor$gni))/sd(df_cor$gni)
+
+correlation<-round(cor(df_cor),2)
+
+correlation<-as.matrix(correlation)
+
+png("corr_plot.png")
+corr_plot <- corrplot(correlation,method = "color", addCoef.col = "grey", addCoefasPercent=TRUE, tl.col = "black", tl.srt = 45, tl.cex=0.8, number.cex = 0.5) 
+dev.off()
+
+```
+
+### fsi vs mobility score
+```{r}
+ggplot(data = df, mapping = aes(x = fsi, y = access, color = continent))+
+  geom_point(size=2)+
+  labs(x="FSI",y="Mobility Score",title="FSI vs Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = df, mapping = aes(x = fsi, y = access, color = continent,shape=continent))+
+  geom_point(size=2)+
+  geom_label_repel(aes(fill=continent),label=df$Country,fontface="bold", color="white", 
+                   box.padding=unit(0.5, "lines"), point.padding=unit(.2, "lines"), 
+                   segment.colour = "grey50",max.overlaps = 13) +
+  labs(x="FSI",y="Mobility Score",title="FSI vs Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+### gni vs mobility score
+```{r}
+df$log_gni<-log(df$gni)
+ggplot(data = df, mapping = aes(x = log_gni, y = access, color = continent))+
+  geom_point(size=2)+
+  labs(x="Log(GNI)",y="Mobility Score",title="Log(GNI) vs Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+```{r}
+df$log_gni<-log(df$gni)
+loggni_mob_score <- ggplot(data = df, mapping = aes(x = log_gni, y = access, color = continent,shape=continent))+
+  geom_point(size=2)+
+  geom_label_repel(aes(fill=continent),label=df$Country,fontface="bold", color="white", 
+                   box.padding=unit(0.5, "lines"), point.padding=unit(.2, "lines"), 
+                   segment.colour = "grey50",max.overlaps = 13) +
+  labs(x="Log(GNI)",y="Mobility Score",title="Log(GNI) vs Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("loggni_vs_mob_score_cluster.png", loggni_mob_score, width = 10, height = 10, dpi = 150)  
+```
+
+### log_populatin vs mobility score
+```{r}
+#log_populatin vs mobility score
+ggplot(data = df, mapping = aes(x = log_p, y = access, color = continent,shape=continent))+
+  geom_point(color="grey", size=2)+
+  geom_label_repel(aes(fill=continent),label=df$Country,fontface="bold", color="white", 
+                   box.padding=unit(0.5, "lines"), point.padding=unit(.2, "lines"), 
+                   segment.colour = "grey50",max.overlaps = 13) +
+  labs(x="Log(population)",y="Mobility Score",title = "Log(population) vs Mobility Score")+
+  theme_classic(base_size = 14)+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+#log_populatin vs mobility score
+ggplot(data = df, mapping = aes(x = log_p, y = access, color = continent))+
+  geom_point(size=2)+
+  labs(x="Log(population)",y="Mobility Score",title = "Log(population) vs Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Development v.s. Ranking
+```{r}
+dev_mob_violin <- ggplot(df,aes(x=development_level,y=access)) + 
+  geom_violin(aes(color=development_level),fill="gray80",alpha=0.5) +
+  geom_sina(aes(color=development_level), alpha=0.25) + 
+  labs(x="Development Level",y="Mobility Score",title="Development vs  Mobility Score") +
+  theme(panel.background=element_rect(fill="ivory1"),
+        panel.grid.major=element_line(color="gray70",size=0.2),
+        panel.grid.minor=element_line(color="gray90",size=0.1),
+        plot.title = element_text(hjust=0.5)) +
+  guides(color=guide_legend(override.aes=list(size=3)))
+
+ggsave("dev_mov_violin.png", dev_mob_violin)
+```
+
+### log_territory vs mobility score
+```{r}
+df$log_t <- log(df$territory)
+ggplot(data = df, mapping = aes(x = log_t, y = access, color = continent,shape=continent))+
+  geom_point(color="grey", size=2)+
+  geom_label_repel(aes(fill=continent),label=df$Country,fontface="bold", color="white", 
+                   box.padding=unit(0.5, "lines"), point.padding=unit(.2, "lines"), 
+                   segment.colour = "grey50",max.overlaps = 18) +
+  labs(title = "Log(territory) vs Mobility Score",x="Log(territory)",y="Mobility Score")+
+  theme_classic(base_size = 14)+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+df$log_t <- log(df$territory)
+ggplot(data = df, mapping = aes(x = log_t, y = access, color = continent))+
+  geom_point(size=2)+
+  labs(title = "Log(territory) vs Mobility Score",x="Log(territory)",y="Mobility Score")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### freedom_house vs mobility score
+```{r}
+ggplot(df,aes(x=freedom_house_ranking,y=access)) + 
+  geom_violin(aes(color=freedom_house_ranking),fill="gray80",alpha=0.5) +
+  geom_sina(aes(color=freedom_house_ranking), alpha=0.25) + 
+  labs(x="Freedom House Ranking",y="Mobility Score",title="Freedom House Ranking vs Mobility Score") +
+  theme(panel.background=element_rect(fill="ivory1"),
+        panel.grid.major=element_line(color="gray70",size=0.2),
+        panel.grid.minor=element_line(color="gray90",size=0.1),
+        plot.title = element_text(hjust=0.5),
+        axis.text.x = element_text(angle = 10, hjust = 0.2, vjust = 0.5)) +
+  guides(color=guide_legend(override.aes=list(size=3)))
+```
+
+### dominant religion vs mobility score
+```{r}
+ggplot(df,aes(x=dominant_religion,y=access)) + 
+  geom_violin(aes(color=dominant_religion),fill="gray80",alpha=0.5) +
+  geom_sina(aes(color=dominant_religion), alpha=0.25) + 
+  labs(x="Dominant Religion",y="Mobility Score",title="Dominant Religion vs Mobility Score") +
+  theme(panel.background=element_rect(fill="ivory1"),
+        panel.grid.major=element_line(color="gray70",size=0.2),
+        panel.grid.minor=element_line(color="gray90",size=0.1),
+        plot.title = element_text(hjust=0.5),
+        axis.text.x = element_text(angle = 45, hjust = 0.2, vjust = 0.5)) +
+  guides(color=guide_legend(override.aes=list(size=3)))
+
+```
+
+## Global Rankings EDA
+
+```{r data-intake}
+#------------------------------outdated method--------------------------------
+#files <- list.files(path = "tabfolder", pattern = "*.tab", full.names = TRUE)
+#allfiles.list <- lapply(files, read.csv, header = TRUE)
+
+#for (i in 1:14){
+#  allfiles.list[[i]]$year <- 2005 + i
+#
+#}
+#
+#df <- do.call(rbind, allfiles.list)
+#
+###-------------------------------Purrr Method -------------------------------
+df <- list.files(path = "tabfolder", pattern = "*.tab", full.names = TRUE) %>% 
+  map_dfr(fread, header = TRUE, .id = "year") %>% mutate(year = as.integer(year) + 2005)
+```
+
+```{r intro-visualization}
+#With Mean line
+mean_line <- df %>% 
+  ggplot(aes(x = ranking)) + 
+  geom_histogram(col = "black", fill = "white") + 
+  geom_vline(aes(xintercept = mean(ranking)), col = "blue", linetype = "dashed", size = 1) + 
+  labs(title = "Distribution of Global Rankings", subtitle = "2006 - 2019", y = "Count", x = "Ranking")
+
+#Mean line and Density
+mean_line_density <- df %>% 
+  ggplot(aes(x = ranking)) + 
+  geom_histogram(aes(y = ..density..), col = "black", fill = "white") + 
+  geom_density(fill = "red", alpha = .2)+
+  geom_vline(aes(xintercept = mean(ranking)), col = "blue", linetype = "dashed", size = 1) + 
+  labs(title = "Density of Global Rankings", subtitle = "2006 - 2019", y = "Count", x = "Ranking")
+
+#Still-by year
+dist_by_year <- df %>% 
+  ggplot(aes(x = ranking)) + 
+  geom_histogram(col = "black", fill = "white") + 
+  labs(title = "Distribution of Global Rankings", y = "Count", x = "Ranking") +
+  facet_wrap(df$year)
+
+#Animation
+anim <- df %>% 
+  ggplot(aes(x = ranking)) + 
+  geom_histogram(col = "black", fill = "white") + 
+  labs(title = "Distribution of Global Rankings", subtitle = "{closest_state}", y = "Count", x = "Ranking") + 
+  transition_states(year, transition_length = 3, state_length = 10)
+
+#animate(anim, duration = 10, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = F))
+#anim_save("Global_rankings.gif")
+
+```
+
+```{r developing-ts}
+#starting with 2006
+bin.subset <- subset(df, year == 2006)
+breaks <- c(0, 10, 20, 30, 40, 50,  60, 70, 80, 90, 100, 110)
+labels <- c("(0-10]", 
+            "(10-20]", 
+            "(20-30]", 
+            "(30-40]", 
+            "(40-50]", 
+            "(50-60]", 
+            "(60-70]", 
+            "(70-80]", 
+            "(80-90]", 
+            "(90-100]", 
+            "(100-110]")
+
+bin.subset$group <- cut(bin.subset$ranking,
+                        breaks = breaks,
+                        include.lowest = TRUE,
+                        right = FALSE,
+                        labels = labels)
+
+#creating a grouping id
+id.var <- bin.subset %>% select(c("country", "group"))
+grouping.df <- merge(df, id.var, by = "country")
+
+#subsetting by given group
+subset.0.10 <- subset(grouping.df, group == "(0-10]")
+subset.10.20 <- subset(grouping.df, group == "(10-20]")
+subset.20.30 <- subset(grouping.df, group == "(20-30]")
+subset.30.40 <- subset(grouping.df, group == "(30-40]")
+subset.40.50 <- subset(grouping.df, group == "(40-50]")
+subset.50.60 <- subset(grouping.df, group == "(50-60]")
+subset.60.70 <- subset(grouping.df, group == "(60-70]")
+subset.70.80 <- subset(grouping.df, group == "(70-80]")
+subset.80.90 <- subset(grouping.df, group == "(80-90]")
+
+#plotting
+p1 <- subset.0.10 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (0-10] )", y = "Ranking", x = "Year", col = "Country")
+
+p2 <- subset.10.20 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (10-20] )", y = "Ranking", x = "Year", col = "Country")
+
+p3 <- subset.20.30 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (20-30] )", y = "Ranking", x = "Year", col = "Country")
+
+p4 <- subset.30.40 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (30-40] )", y = "Ranking", x = "Year", col = "Country")
+
+p5 <- subset.40.50 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (40-50] )", y = "Ranking", x = "Year", col = "Country")
+
+p6 <- subset.50.60 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (50-60] )", y = "Ranking", x = "Year", col = "Country")
+
+p7 <- subset.60.70 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (60-70] )", y = "Ranking", x = "Year", col = "Country")
+
+p8 <- subset.70.80 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (70-80] )", y = "Ranking", x = "Year", col = "Country")
+
+p9 <- subset.80.90 %>%
+  ggplot(aes(x = year, y = ranking, col = country, group = country)) + 
+  geom_line() + 
+  labs(title = "Change of Ranking from 2006 (2006: (80-90] )", y = "Ranking", x = "Year", col = "Country")
+
+##animating to better show difference
+
+subset.0.10.anim <- subset.0.10 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (0-10] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.10.20.anim <- subset.10.20 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (10-20] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.20.30.anim <- subset.20.30 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (20-30] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.30.40.anim <- subset.30.40 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (30-40] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.40.50.anim <- subset.40.50 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (40-50] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.50.60.anim <- subset.50.60 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (50-60] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.60.70.anim <- subset.60.70 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (60-70] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.70.80.anim <- subset.70.80 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (70-80] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+
+subset.80.90.anim <- subset.80.90 %>%
+  ggplot(aes(x = year, y = ranking, color = country, group = country)) + 
+  #geom_point(size = 6, alpha = .5) +
+  geom_line()+
+  labs(title = "Change of Ranking from 2006 (2006: (80-90] )", subtitle = "{closest_state}", y = "Ranking", x = "Year", col = "Country") + 
+  theme(legend.position = "none") + 
+  transition_states(states = country, state_length = 10)
+```
+
+```{r animation-plot-saving}
+ggsave(mean_line, width = 16, height = 16, dpi = 300, device = "png", filename = "rankings_histogram.png")
+ggsave(mean_line_density, width = 16, height = 16, dpi = 300, device = "png", filename = "overall_density.png")
+ggsave(dist_by_year, width = 16, height = 16, dpi = 300, device = "png", filename = "rankings_distribution_by_year.png")
+
+
+ggsave(p1, width = 16, height = 16, dpi = 300, device = "png", filename = "0-10-rankings-plot.png")
+ggsave(p2, width = 16, height = 16, dpi = 300, device = "png", filename = "10-20-rankings-plot.png")
+ggsave(p3, width = 16, height = 16, dpi = 300, device = "png", filename = "20-30-rankings-plot.png")
+ggsave(p4, width = 16, height = 16, dpi = 300, device = "png", filename = "30-40-rankings-plot.png")
+ggsave(p5, width = 16, height = 16, dpi = 300, device = "png", filename = "40-50-rankings-plot.png")
+ggsave(p6, width = 16, height = 16, dpi = 300, device = "png", filename = "50-60-rankings-plot.png")
+ggsave(p7, width = 16, height = 16, dpi = 300, device = "png", filename = "60-70-rankings-plot.png")
+ggsave(p8, width = 16, height = 16, dpi = 300, device = "png", filename = "70-80-rankings-plot.png")
+ggsave(p9, width = 16, height = 16, dpi = 300, device = "png", filename = "80-90-rankings-plot.png")
+
+#Uncomment functions to rewrite animations
+
+#animate(subset.0.10.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("0-10-Rankings.gif")
+
+#animate(subset.10.20.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("10-20-Rankings.gif")
+
+#animate(subset.20.30.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("20-30-Rankings.gif")
+
+#animate(subset.30.40.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("30-40-Rankings.gif")
+
+#animate(subset.40.50.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("40-50-Rankings.gif")
+
+#animate(subset.50.60.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("50-60-Rankings.gif")
+
+#animate(subset.60.70.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("60-70-Rankings.gif")
+
+#animate(subset.70.80.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("70-80-Rankings.gif")
+
+#animate(subset.80.90.anim, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("80-90-Rankings.gif")
+
+```
+
+## schengen-Visa Comparison EDA
+```{r}
+top40 <- read_excel("Mini case studies top 40 edit.xlsx", 
+                    sheet = "Sheet1")
+df <- list.files(path = "tabfolder", pattern = "*.tab", full.names = TRUE) %>% 
+  map_dfr(fread, header = TRUE, .id = "year") %>% mutate(year = as.integer(year) + 2005)
+
+top40 %>% inner_join(df,by=c("Country" = "country"))
+df <- top40 %>% left_join(df, by = c("Country" = "country"))
+
+df$yn <- substr(df$`Schengen Visa waiver Y/N (date)`,1,1)
+df_sch <- filter(df,yn=='Y')
+
+df_sch$schyear <- substr(df_sch$`Schengen Visa waiver Y/N (date)`,4,7) %>% 
+  as.numeric() 
+
+df_sch <- filter(df_sch,schyear>=2006) %>% 
+  select(., c(1,10,11,12,14))
+colnames(df_sch)[1] <- "country"
+
+#unique(df_sch$schyear)
+
+sch_09 <- filter(df_sch,schyear==2009)
+sch_10 <- filter(df_sch,schyear==2010)
+sch_11 <- filter(df_sch,schyear==2011)
+sch_13 <- filter(df_sch,schyear==2013)
+sch_14 <- filter(df_sch,schyear==2014)
+sch_15 <- filter(df_sch,schyear==2015)
+sch_17 <- filter(df_sch,schyear==2017)
+```
+
+```{r}
+ani09 <- na.omit(sch_09) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_09$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_09$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2009 Schengen Visa)", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani10 <- na.omit(sch_10) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_10$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_10$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2010 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani11 <- na.omit(sch_11) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_11$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_11$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2011 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani13 <- na.omit(sch_13) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_13$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_13$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2013 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani14 <- na.omit(sch_14) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_14$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_14$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2014 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani15 <- na.omit(sch_15) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_15$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_15$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2015 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+ani17 <- na.omit(sch_17) %>%
+  ggplot(aes(x = year, y = access, color = country, group = country))+ 
+  geom_point() +
+  geom_line()+
+  geom_vline(xintercept = sch_17$schyear,linetype="dotted",col='red',size=1.2)+
+  annotate("text",x=sch_17$schyear,y=175,label="Schengen Visa-Waiver",col='red')+
+  geom_text(aes(label = ranking, vjust = 1.1, hjust = -0.5, angle = 45))+
+  labs(title = "Change of Access from 2017 Schengen Visa", subtitle = "{closest_state}", y = "Access", x = "Year", col = "Country") + 
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks=seq(2006, 2019, 1))+
+  transition_states(states = country, state_length = 10)
+
+
+#Uncomment functions to rewrite animations
+
+#animate(ani09, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen09.gif")
+
+#animate(ani10, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen10.gif")
+
+#animate(ani11, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen11.gif")
+
+#animate(ani13, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen13.gif")
+
+#animate(ani14, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen14.gif")
+
+#animate(ani15, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen15.gif")
+
+#animate(ani17, duration = 20, fps = 30, width = 2000, height = 2000, res = 300, renderer = gifski_renderer(loop = T))
+#anim_save("schengen17.gif")
+  
+```

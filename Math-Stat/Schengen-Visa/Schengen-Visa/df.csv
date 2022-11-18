@@ -1,0 +1,39 @@
+"","Country","Change in mobility score (2006-2019)","development_level","population","territory","world_region","dominant_religion","freedom_house_ranking","Schengen Visa waiver Y/N (date)","ranking","access"
+"1","United Arab Emirates ",115,"DC",9992083,83600,"Middle East or Western Asia","Islam","Not Free","Y (2015)",20,167
+"2","Taiwan ",87,"DC",23603049,35980,"East Asia","Buddist and Taoist","Free","Y (2011)",30,146
+"3","Serbia ",81,"DC",7012165,77474,"South-Eastern Europe","Orthodox Christianity","Partly Free","Y (2009)",41,131
+"4","Seychelles ",79,"DC",95981,455,"East Africa","Roman Catholic","Partly Free","Y (2009)",27,150
+"5","Mauritius ",78,"DC",1379365,2040,"Southern Africa","Hindu","Free","Y (2009)",31,145
+"6","Albania ",77,"DC",3074579,28748,"South-Eastern Europe","Muslim (56.7)","Partly Free","Y (2010)",52,113
+"7","Bosnia and Herzegovina ",76,"DC",3835586,51197,"South-Eastern Europe","Muslim  (50.7)","Partly Free","Y (2010)",51,116
+"8","Colombia ",76,"DC",49084841,1138910,"South America","Roman Catholic","Partly Free","Y (2015)",45,124
+"9","Ukraine ",76,"DC",43922939,603550,"Eastern Europe","Orthodox Christianity","Partly Free","Y (2017)",44,126
+"10","Moldova ",73,"DC",3364496,33851,"Eastern Europe","Orthodox Christianity","Partly Free","Y (2014)",49,119
+"11","Peru ",70,"DC",31914989,1285216,"South America","Roman Catholic","Free","Y (2015)",40,132
+"12","Barbados ",69,"DC",294560,430,"Caribbean","Protestant","Free","Y (2009)",23,158
+"13","St. Kitts and Nevis ",68,"DC",53821,261,"Caribbean","Protestant","Free","Y (2009)",26,152
+"14","Georgia ",67,"DC",3997000,69700,"Eastern Europe","Orthodox Christianity","Partly Free","Y (2017)",52,113
+"15","Antigua and Barbuda ",65,"DC",98179,442.6,"Caribbean","Protestant","Free","Y (2009)",29,147
+"16","Marshall Islands ",65,"DC",77917,181,"Oceania","Protestant","Free","Y (2015)",47,122
+"17","Dominica ",64,"DC",74243,751,"Caribbean","Roman Catholic","Free","Y (2015)",37,135
+"18","Trinidad and Tobago ",64,"DC",1208789,5128,"Caribbean","Christianity (various traditions)","Free","Y (2015)",29,147
+"19","Grenada ",62,"DC",113094,344,"Caribbean","Protestant","Free","Y (2015)",34,141
+"20","Samoa ",61,"DC",203774,2831,"East Asia","Protestant","Free","Y (2015)",42,130
+"21","Vanuatu ",61,"LDC",298333,12189,"Oceania","Protestant","Free","Y (2015)",43,129
+"22","St. Lucia ",60,"DC",166487,616,"Caribbean","Roman Catholic","Free","Y (2015)",32,144
+"23","Croatia ",59,"HDC",4227746,56594,"South-Eastern Europe","Roman Catholic","Free","Y (2013)",20,167
+"24","Tonga ",59,"DC",106095,747,"Oceania","Protestant","Free","Y (2015)",46,123
+"25","St. Vincent and the Grenadines ",58,"DC",101390,389,"Caribbean","Protestant","Free","Y (2015)",32,144
+"26","Bahamas ",57,"DC",337721,13880,"Caribbean","Protestant","Free","Y (2009)",25,153
+"27","Timor-Leste ",57,"LDC",1383723,14874,"East Asia","Roman Catholic","Free","Y (2015)",56,94
+"28","Palau ",56,"DC",21685,459,"Oceania","Roman Catholic","Free","Y (2015)",NA,NA
+"29","Russian Federation ",56,"DC",141722205,17098242,"Eastern Europe/Northern Asia","Russian Orthodox","Not Free","N",51,116
+"30","Solomon Islands ",56,"DC",685097,28896,"Oceania","Protestant","Free","Y (2015)",43,129
+"31","Tuvalu ",56,"LDC",11342,26,"Oceania","Protestant","Free","Y (2015)",44,126
+"32","Lithuania ",55,"HDC",2731464,65300,"Baltics","Roman Catholic","Free","Y (2004)",9,180
+"33","Kiribati ",54,"LDC",111796,811,"Oceania","Roman Catholic","Free","Y (2015)",48,121
+"34","Romania ",54,"DC",21302893,238391,"Balkans","Eastern Orthodox","Free","Y (2002)",18,169
+"35","Bulgaria ",52,"HDC",6966899,110879,"Balkans","Eastern Orthodox","Free","Y (2001)",19,168
+"36","Latvia ",52,"HDC",1881232,64589,"Baltics","Lutheran","Free",NA,10,179
+"37","Macao (SAR China) ",52,"HDC",614458,28.2,"East Asia","Folk religionist","n/a","Y (2001)",36,139
+"38","Estonia ",51,"HDC",NA,45228,NA,"Orthodox Christianity","Free",NA,11,178

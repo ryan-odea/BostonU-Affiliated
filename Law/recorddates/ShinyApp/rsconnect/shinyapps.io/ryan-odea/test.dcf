@@ -1,0 +1,13 @@
+name: test
+title: test
+username:
+account: ryan-odea
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4619697
+bundleId: 5015832
+url: https://ryan-odea.shinyapps.io/test/
+when: 1631192918.55436
+lastSyncTime: 1631192918.55436
+asMultiple: FALSE
+asStatic: FALSE

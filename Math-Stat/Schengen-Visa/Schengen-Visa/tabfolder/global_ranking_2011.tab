@@ -1,0 +1,200 @@
+country, ranking, access 
+Denmark , 1 , 173
+Finland , 1 , 173
+Sweden , 1 , 173
+Germany , 2 , 172
+Belgium , 3 , 171
+France , 3 , 171
+Italy , 3 , 171
+Luxembourg , 3 , 171
+Netherlands , 3 , 171
+United Kingdom , 3 , 171
+Japan , 4 , 170
+Norway , 4 , 170
+Portugal , 4 , 170
+Spain , 4 , 170
+Ireland , 5 , 169
+United States , 5 , 169
+Austria , 6 , 168
+Switzerland , 7 , 167
+Australia , 8 , 166
+Greece , 8 , 166
+New Zealand , 8 , 166
+Canada , 9 , 164
+Iceland , 9 , 164
+Singapore , 9 , 164
+South Korea , 10 , 163
+Malta , 11 , 160
+Liechtenstein , 12 , 158
+Malaysia , 12 , 158
+Hungary , 13 , 157
+Slovakia , 13 , 157
+Slovenia , 14 , 156
+Czech Republic , 15 , 155
+Poland , 16 , 154
+Estonia , 17 , 153
+Latvia , 17 , 153
+Lithuania , 17 , 153
+Cyprus , 18 , 150
+Monaco , 18 , 150
+Hong Kong (SAR China) , 19 , 149
+San Marino , 20 , 148
+Brunei , 21 , 144
+Romania , 21 , 144
+Andorra , 22 , 143
+Bulgaria , 22 , 143
+Israel , 23 , 142
+Argentina , 24 , 141
+Chile , 24 , 141
+Brazil , 25 , 140
+Barbados , 26 , 137
+Bahamas , 27 , 136
+St. Kitts and Nevis , 28 , 131
+Mexico , 29 , 129
+Antigua and Barbuda , 30 , 128
+Uruguay , 31 , 127
+Vatican City , 32 , 125
+Seychelles , 33 , 124
+Venezuela , 33 , 124
+Croatia , 34 , 122
+Mauritius , 34 , 122
+Paraguay , 35 , 121
+Costa Rica , 36 , 120
+Panama , 37 , 114
+El Salvador , 38 , 113
+Guatemala , 39 , 112
+Honduras , 39 , 112
+Taiwan , 40 , 111
+Macao (SAR China) , 41 , 109
+Nicaragua , 42 , 108
+Serbia , 43 , 100
+North Macedonia , 44 , 
+Montenegro , 45 , 97
+Trinidad and Tobago , 46 , 95
+South Africa , 47 , 92
+St. Lucia , 48 , 91
+St. Vincent and the Grenadines , 48 , 91
+Turkey , 48 , 91
+Russian Federation , 49 , 89
+Bosnia and Herzegovina , 50 , 87
+Grenada , 51 , 86
+Albania , 52 , 84
+Belize , 53 , 83
+Dominica , 54 , 82
+Solomon Islands , 55 , 79
+Samoa , 56 , 78
+Fiji , 57 , 76
+Maldives , 57 , 76
+Tuvalu , 57 , 76
+Jamaica , 58 , 75
+Peru , 58 , 75
+Vanuatu , 58 , 75
+Guyana , 59 , 74
+Kiribati , 59 , 74
+Nauru , 60 , 73
+Tonga , 60 , 73
+Kuwait , 61 , 71
+Papua New Guinea , 62 , 70
+Ecuador , 63 , 69
+Gambia , 63 , 69
+Marshall Islands , 63 , 69
+Ukraine , 63 , 69
+Botswana , 64 , 68
+Bolivia , 65 , 67
+United Arab Emirates , 65 , 67
+Micronesia , 66 , 66
+Qatar , 66 , 66
+Suriname , 66 , 66
+Bahrain , 67 , 65
+Kenya , 67 , 65
+Lesotho , 67 , 65
+Malawi , 67 , 65
+ Moldova , 67 , 
+Namibia , 67 , 65
+Palau Islands , 67 , 
+Sierra Leone , 68 , 64
+Eswatini (Swaziland) , 69 , 63
+Thailand , 69 , 63
+Tunisia , 69 , 63
+Zambia , 69 , 63
+Ghana , 70 , 62
+Tanzania , 70 , 62
+Oman , 71 , 60
+Uganda , 72 , 59
+Georgia , 73 , 58
+Kazakhstan , 73 , 58
+Philippines , 73 , 58
+Saudi Arabia , 73 , 58
+Belarus , 74 , 57
+Azerbaijan , 75 , 56
+Zimbabwe , 75 , 56
+Cape Verde  Islands , 76,  
+Kyrgyzstan , 76 , 55
+Colombia , 77 , 54
+Benin , 78 , 53
+India , 78 , 53
+Cote d'Ivoire (Ivory Coast) , 79 , 52
+Cuba , 79 , 52
+Guinea , 79 , 52
+Mauritania , 79 , 52
+Senegal , 79 , 52
+Armenia , 80 , 51
+Burkina Faso , 80 , 51
+Indonesia , 80 , 51
+Mali , 80 , 51
+Togo , 80 , 51
+Morocco , 81 , 50
+Tajikistan , 81 , 50
+Uzbekistan , 82 , 49
+Dominican Republic , 83 , 48
+Guinea-Bissau , 83 , 48
+Niger , 83 , 48
+Algeria , 84 , 46
+Nigeria , 84 , 46
+Turkmenistan , 84 , 46
+Sao Tome and Principe , 85 , 45
+Bhutan , 86 , 44
+Central African Republic , 86 , 44
+Liberia , 86 , 44
+Madagascar , 86 , 44
+Mozambique , 86 , 44
+Mongolia , 87 , 43
+Gabon , 88 , 42
+Haiti , 88 , 42
+Laos , 88 , 42
+Timor-Leste , 88 , 
+Vietnam , 88 , 42
+Chad , 89 , 41
+Egypt , 89 , 41
+Cambodia , 90 , 40
+China , 90 , 40
+Jordan , 90 , 40
+Bangladesh , 91 , 39
+Congo (Rep.) , 91 , 39
+Rwanda , 91 , 39
+Yemen , 91 , 39
+Cameroon , 92 , 38
+Comores Islands , 92 , 
+Libya , 92 , 38
+Sri Lanka , 92 , 38
+Equatorial Guinea , 93 , 37
+Kosovo , 93 , 37
+North Korea , 93 , 37
+Syria , 93 , 37
+Iran , 94 , 36
+Burundi , 95 , 35
+Djibouti , 95 , 35
+Angola , 96 , 34
+Congo (Dem. Rep.) , 96 , 34
+Ethiopia , 96 , 34
+Myanmar , 96 , 34
+Nepal , 96 , 34
+Lebanon , 97 , 33
+Palestinian Territory , 97 , 33
+Eritrea , 98 , 32
+South Sudan , 98 , 32
+Sudan , 98 , 32
+Pakistan , 99 , 31
+Iraq , 100 , 28
+Somalia , 100 , 28
+Afghanistan , 101 , 24

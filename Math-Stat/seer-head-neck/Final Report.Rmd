@@ -1,0 +1,300 @@
+---
+title: "MA679 SEER Project Final Report"
+author: "Anna Cook, Bruce Mallory, Alison Pedraza, & Ryan O'Dea"
+date: "5/5/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+
+pacman::p_load(
+  readr,
+  tidyverse,
+  magrittr,
+  rstanarm,
+  data.table,
+  Matrix,
+  xgboost,
+  rpart,
+  rpart.plot
+)
+
+```
+
+```{r read-in}
+cancer_data <- read_csv("Transformed Data.csv")
+cancer_data %<>% filter(cancer_data$`AJCC 7 Stage` != "IVNOS")
+cancer_data$Race <- ifelse(cancer_data$Race == "Asian or Pacific Islander" | cancer_data$Race == "American Indian/Alaska Native", "Native Am. or Asian", cancer_data$Race)
+cancer_data$Insurance <- ifelse(cancer_data$Insurance == "Insured/No specifics", "Insured", cancer_data$Insurance)
+
+dataframe <- cancer_data %>%
+  mutate(across(.cols = c(Sex,
+                          Race,
+                          Insurance,
+                          `SEER Registry`,
+                          `AJCC 7 Stage`,
+                          `Lymph Nodes`,
+                          Mets,
+                          `Cause of Death`,
+                          `Surgery Performed?`,
+                          `Surgery Decision`,
+                          Radiation,
+                          Chemotherapy), factor),
+         size = Size,
+         id = `Study ID`,
+         sex = Sex,
+         year = `Year of Diagnosis`,
+         age = `Age at Diagnosis`,
+         race = Race,
+         insurance = Insurance,
+         location = `SEER Registry`,
+         pct_9th_grade = `% <9th Grade Education`,
+         pct_hs = `% <High School Education`,
+         pct_ba = `% <Bachelors Education`,
+         pct_poverty = `% Persons Below Poverty`,
+         pct_unemployed = `% Unemployed ACS 2013-2017`,
+         med_income = `Median Household Income`,
+         pct_language_isolation = `% Language isolation ACS 2013-2017 (households)`,
+         site = Site,
+         subsite = Subsite,
+         stage = `AJCC 7 Stage`,
+         lymph_nodes = `Lymph Nodes`,
+         mets = Mets,
+         cause_of_death = `Cause of Death`,
+         surg_performed = `Surgery Performed?`,
+         surg_decision = `Surgery Decision`,
+         radiation = Radiation,
+         chemo = Chemotherapy) %>% 
+  select(-c(Size,
+            `Study ID`,
+            Sex,
+            `Year of Diagnosis`,
+            `Age at Diagnosis`,
+            Race,
+            Insurance,
+            `SEER Registry`,
+            `% <9th Grade Education`,
+            `% <High School Education`,
+            `% <Bachelors Education`, 
+            `% Persons Below Poverty`,
+            `% Unemployed ACS 2013-2017`, 
+            `Median Household Income`,
+            `% Language isolation ACS 2013-2017 (households)`,
+            Site,
+            Subsite,
+            `AJCC 7 Stage`,
+            `Lymph Nodes`,
+            Mets,
+            `Cause of Death`,
+            `Surgery Performed?`,
+            `Surgery Decision`,
+            Radiation,
+            Chemotherapy)) %>%
+  as.data.frame() %>%
+  filter(., stage != "IVNOS")
+
+```
+
+## Introduction
+
+The purpose of this assignment was to analyze the SEER head and neck cancer dataset in order to determine whether there is any racial bias that arises in how patients are treated. More specifically, our group was interested to know whether there was any evidence of racial or gender bias in the rates at which patients are given surgery as part of their cancer treatment after controlling for insurance and cancer stage.
+
+## Data
+
+The SEER dataset we worked with included patients with cancer in one of 7 different sites in the head and neck. We chose to focus our analysis on just one site, the oral cavity, as different sites may have different treatment protocols and therefore may show differences in patients receiving surgery or not. In the original dataset, the cancer stages were broken down into stages I, II, III, IVA, IVB, IVC, and IVNOS (stage 4 not otherwise specified). Because these IVNOS patients cannot accurately be placed into a stage IV category and there are too few observations to analyze these patients as a stage of their own, we removed these 147 observations. Additionally, the original dataset contained both “insured” and “insured/no specifics” which we combined into a single category called “insured.” Lastly, there were not very many observations for the American Indian/Alaska Native or the Asian or Pacific Islander racial groups, so these two groups were combined into a single group called “Native Am. or Asian.”
+
+## EDA/Methods
+
+As part of a preliminary exploratory analysis, we build a machine learning model using xgboost in R in order to identify the most important variables for predicting whether a patient received surgery or not. This model showed the relative imbalance of the provided SEER data set. After the hyperparameter search, if we trained the model on the full data (without consideration for accuracy testing) the relative importance matrix would show a much different story compared to random sampling into train and test sets. Two different matrices are shown in the appendix. Additionally, each time a different seed was forced into the random sampling, the order of importance would drastically shift between the different features. See total data set importance matrix in Appendix figure 2 and seeded sample importance in figure 3. As conjecture, it could be considered that the random sampling has the potential of completely avoiding certain groups due to the imbalance of the data set within each feature. Hypothetically, it is entirely possible that the random sampling for the training data could entirely miss black people who are uninsured. Because of this imbalance, it would likely be much more advisable to continue with descriptive statistics over the entire dataset compared to attempting to model the set.
+
+When looking at tuning the model on the entire set (below), we see the relative importance gain at each stage of the decision tree proceed by the log odds of case 1- Surgery Completed. We can also look into an Rpart decision tree which is generated given a complexity metric. This tree is generally a more interpretable basic decision tree - one without gradient booster to improve accuracy of the fit. Using a complexity parameter of 0.0015 yielded results similar to the gradient boosted tree- dividing by lymph node involvement, by stage, then location age and race (Appendix, Figure 4). These results led us to conclude that while there are a number of important factors contributing to whether a patient receives surgery or not, race seems to play a role. The rest of our analysis is aimed at exploring this relationship further. 
+
+In order to identify whether there is a difference in the likelihood of patients of different races being treated with surgery, we fit a series of logistic regression models with surgery as the outcome variable, with “Yes” or 1 indicating the patient received surgery as part of their cancer treatment, and “No” or 0 indicating no surgery. The results are discussed in the next section. 
+
+
+```{r xgb-training}
+#Train Model -----------------------
+
+train_frame <- dataframe %>% 
+    mutate(surg_performed = ifelse(surg_performed == "Yes", 1, 0))
+
+  #Tuning Matrix ----------------------
+  tuning_df <- train_frame %>% 
+    mutate(across(.cols = c(sex,
+                            race,
+                            age,
+                            insurance,
+                            mets,
+                            lymph_nodes,
+                            stage,
+                            location),
+                  as.numeric))
+
+  tune_matrix <- sparse.model.matrix(surg_performed ~ 
+                                       stage + 
+                                       sex + 
+                                       race + 
+                                       age + 
+                                       insurance + 
+                                       mets + 
+                                       lymph_nodes + 
+                                       location,
+                                     data = tuning_df,
+                                     contrasts.arg = c("surg_performed",
+                                                       "stage",
+                                                       "race",
+                                                       "age",
+                                                       "insurance",
+                                                       "mets",
+                                                       "lymph_nodes",
+                                                       "location"),
+                                     sparse = FALSE,
+                                     sci = FALSE)
+  
+  nrounds <- 1435
+  y_train <- train_frame$surg_performed
+  
+  parameters <- list(
+    eta = 0.5,
+    max_depth = 3,
+    min_child_weight = 3,
+    subsample = 1,
+    colsample_bytree = 0.8,
+    gamma = 0.5
+  )
+  
+  #Full hyperparameter search algorithm in seer-rmd (same repo)
+  
+    xgb_model <- xgboost(
+    params = parameters,
+    data = tune_matrix,
+    label = y_train,
+    nrounds = nrounds,
+    objective = "reg:logistic",
+    verbose = 0
+  )
+xgb.plot.multi.trees(model = xgb_model, feature_names = colnames(tune_matrix))
+
+```
+
+## Results
+
+First, we fit a logistic regression model with Race, Age, Sex, Insurance, and Cancer Stage as predictors, and surgery as the outcome variable. Initially, we did not include any interaction terms. The results are displayed below. The intercept represents insured white males with stage I cancer. From the output, we can see that almost all of the variable levels are statistically significant at alpha = 0.05. Importantly, we noticed that as the cancer stage progresses from I to IVC, patients are less likely to receive surgery as part of their cancer treatment. Additionally, patients who have Medicaid are less likely to receive surgery than patients who are privately insured, and patients who do not have insurance are even less likely than that to receive surgery. It also appears that females are slightly more likely to receive surgery than males. When looking at the racial groups, the model summary shows significant coefficients (at alpha = 0.05) for both Black and Native American or Asian patients, where Black patients are less likely to receive surgery than white patients, and Native American or Asian patients are more likely. Although these results are interesting, it is unclear whether this result is due to bias from the doctors giving different recommendations, or whether there may be some kind of interaction going on. To answer this question, we fit several additional logistic regression models with various interaction terms. 
+
+```{r model-summary-1}
+cancer_data$Race <- relevel(factor(cancer_data$Race), "White")
+cancer_data$Sex <- relevel(factor(cancer_data$Sex), "Male")
+cancer_data$Insurance <- relevel(factor(cancer_data$Insurance), "Insured")
+oral_cavity <- filter(cancer_data, Site == "Oral Cavity")
+model1 <- glm(1*(`Surgery Performed?`== "Yes") ~ Sex + Insurance + Race + `AJCC 7 Stage` + `Age at Diagnosis`, data = oral_cavity, family = binomial(link = "logit"))
+summary(model1)
+```
+
+
+\newpage
+
+The first interaction we were interested in exploring was that between race and cancer stage. We fit a logistic regression model identical to the previous one, with the only difference being that we also included the interaction term for race and cancer stage. The model summary is displayed below. From this output, we no longer see any significant coefficients for the race or the interaction between race and cancer stage. However, it is worth noting that the interaction between the Black racial group and stage IVB cancer was borderline, although not quite significant at alpha = 0.05 (p-value = .07). This aligns with a pattern we noticed in our EDA, where it appeared that Black patients with stage IVB cancer received surgery less often than the other racial groups at the same stage. (see Figure 1)
+
+```{r model-summary-2}
+options(width = 90)
+model2 <- glm(1*(`Surgery Performed?`== "Yes") ~ Sex + Insurance + Race*`AJCC 7 Stage` + `Age at Diagnosis`, data = oral_cavity, family = binomial(link = "logit"))
+summary(model2)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Black patients at stage IVB appear to receive surgery less frequently than patients from other racial groups at the same stage. This result was nonsignificant at alpha = 0.05, although not far from the threshold with a p-value of 0.07.", fig.align="center"}
+ggplot(data = oral_cavity) + geom_bar(aes(`AJCC 7 Stage`, fill=`Surgery Performed?`), position = "fill") + facet_wrap(vars(Race)) + ggtitle("Proportion of Patients Receiving Surgery by Stage and Race")
+```
+
+\newpage
+Another interaction we considered was that between race and insurance. Because insurance is an important factor in determining a patient's treatment plan, and insurance may be more easily available for some demographic groups than others, we wanted to explore this interaction further. We fit another logistic regression model with surgery as the outcome, and all of the predictors that were included in the first model, with the addition of the race and insurance interaction. The results are displayed below. In this output, we significant coefficients (alpha = 0.05) for the Black racial group as well as the interaction between the Hispanic racial group and the uninsured group. These patients are less likely to receive surgery as part of their cancer treatment according to the model. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+model4 <- glm(1*(`Surgery Performed?`== "Yes") ~ Sex + Race*Insurance + `AJCC 7 Stage` + `Age at Diagnosis`, data = oral_cavity, family = binomial(link = "logit"))
+summary(model4)
+```
+
+
+## Conclusion/Discussion
+
+The results described above hint at a couple differences (and potentially some biases) in the way that oral cavity cancer patients are treated with or without surgery. First, in each of the logistic regression models above, each level of the cancer stages were highly significant at alpha = 0.05. The models showed that the later the patient's cancer stage (with IVC being the latest), the less likely the patient is to receive surgery as part of their treatment. This finding was consistent even when adding various interaction terms with different combinations of predictors. However, our primary interest in this analysis was in biases that may arise due to race. In our initial logistic regression model, we found that the Black and Native American or Asian racial groups showed statistically significant coefficients against white patients as the baseline. However, when including interactions between race and insurance or race and cancer stage, these relationships because less pronouced, or disappeared. Importantly, we noticed a slight trend in the interaction between race and cancer stage, where it appears that Black patients with stage IVB cancer may be treated with surgery less often than stage IVB cancer patients of other races. However, this relationship was non-significant at alpha = 0.05, so this cannot be definitely concluded based on the results presented here. 
+
+There are some important limitations to consider for this analysis. First, we were working with a fairly unbalanced dataset. Specifically, the vast majority of the patients were white and insured, and there are very few patients with stage IVB or IVC cancer (see Figures in Appendix). Second, we did not take into account the other forms of cancer treatment in this analysis. For example, many patients receive various combinations of radiation and/or chemotherapy in addition or in lieu of surgery. Here our analysis focused only on whether surgery was performed or not, so we cannot draw any conclusions about the overall quality/rigor of care based on these analyses.
+
+```{r}
+ggplot(data = oral_cavity) + geom_bar(aes(Race, fill = Insurance)) + ggtitle("Histogram of Race and Insurance Type")
+ggplot(data = oral_cavity) + geom_bar(aes(`AJCC 7 Stage`, fill = Race)) + ggtitle("Histogram of Stage and Race")
+ 
+```
+
+
+## Appendix
+
+```{r total-importance, fig.cap="Visualization of the importance matrix for the entire data set", fig.align="center"}
+importance_matrix <- xgb.importance(model = xgb_model)  
+xgb.plot.importance(importance_matrix, measure = "Gain")
+
+```
+
+```{r seeded-boost, fig.cap= "Visualization of the importance matrix using a seeded (2021) subset", fig.align="center"}
+set.seed(2021)
+train_ind <- sample(seq_len(nrow(train_frame)), round(nrow(train_frame)*0.75))
+
+train <- train_frame[train_ind, ]
+y_train <- train$surg_performed
+
+tune_matrix <- sparse.model.matrix(surg_performed ~ 
+                                       stage + 
+                                       sex + 
+                                       race + 
+                                       age + 
+                                       insurance + 
+                                       mets + 
+                                       lymph_nodes + 
+                                       location,
+                                     data = train,
+                                     contrasts.arg = c("surg_performed",
+                                                       "stage",
+                                                       "race",
+                                                       "age",
+                                                       "insurance",
+                                                       "mets",
+                                                       "lymph_nodes",
+                                                       "location"),
+                                     sparse = FALSE,
+                                     sci = FALSE)
+
+    xgb_model <- xgboost(
+    params = parameters,
+    data = tune_matrix,
+    label = y_train,
+    nrounds = nrounds,
+    objective = "reg:logistic",
+    verbose = 0
+  )
+
+  importance_matrix <- xgb.importance(model = xgb_model)  
+  xgb.plot.importance(importance_matrix, measure = "Gain")
+```
+
+```{r rpart, fig.cap = "Rpart plot with complexity metric 0.0015 divided the trees similar to the XGBoost algorithm splicing", fig.align = "center"}
+rpart.plot(
+  rpart(
+    surg_performed ~ 
+      stage + 
+      sex + 
+      race + 
+      age + 
+      insurance + 
+      mets + 
+      lymph_nodes + 
+      location,
+    data = dataframe,
+    cp = 0.0015
+  )
+)
+```
+

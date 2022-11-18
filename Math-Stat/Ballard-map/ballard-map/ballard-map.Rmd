@@ -1,0 +1,50 @@
+---
+title: "Ballard_Map"
+author: "Ryan O'Dea"
+date: "3/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pacman::p_load(tidyverse,
+               geosphere,
+               sf,
+               usmap,
+               maps,
+               gganimate,
+               ggmap,
+               magrittr,
+               lubridate)
+
+register_google(key = "<key>")
+letters <- read.csv("latlong.csv")
+letters$year <- as.factor(letters$year)
+
+```
+
+```{r}
+map <- get_map(location = "boston", source = "google", maptype = "roadmap", zoom = 8)
+p <- ggmap(map) + 
+  geom_point(data = letters, aes(x = origin_long, y = origin_lat, alpha = .6, size = 4)) + 
+  geom_point(data = letters, aes(x = rec_long, y = rec_lat, alpha = .6, size = 4)) +
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(0,0,-1,-1), "lines"),
+        legend.position = "none") + 
+  labs(x = "", y = "", title = "Timelapse of Letters Sent by Emily Dickinson", subtitle = "Year: {closest_state}", color = "Year") +
+  geom_curve(aes(x = origin_long, y = origin_lat, xend = rec_long, yend = rec_lat), data = letters,
+             arrow = arrow(angle = 15, ends = "last", length = unit(0.5, "cm"), type = "closed"),
+             alpha = .5, curvature = .15, inherit.aes = TRUE) + 
+  coord_cartesian() + 
+  transition_states(year, transition_length = 0) +
+  enter_fade() +
+  exit_fade() + 
+  shadow_mark()
+
+animate(p, duration = 10, fps = 30, width = 1000, height = 1000, res = 150, renderer = gifski_renderer(loop = TRUE))
+anim_save("map.gif")
+```
+

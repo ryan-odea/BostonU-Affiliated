@@ -1,0 +1,524 @@
+---
+title: "MA679 Midterm Exam"
+author: "Ryan O'Dea"
+date: "3/27/2021"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+
+pacman::p_load(tidyverse,
+               magrittr,
+               data.table,
+               RColorBrewer,
+               wesanderson,
+               gridExtra,
+               gbm,
+               caret, 
+               pROC,
+               data.tree,
+               DiagrammeR)
+```
+
+# Context
+
+A company wants to hire data scientists from pool of people enrolled in the courses conducted by the company. The company wants to know which of these candidates are looking to change their job.  Information related to demographics, education, experience are in hands from candidates signup and enrollment.  In this exam, your goal is to predict if the candidate is looking for a new job or will work for the current company. 
+
+- uid : Unique ID for candidate
+- city: City code
+- city_dev_index : Development index of the city (scaled) 
+- gender: Gender of candidate
+- relevant_experience: Relevant experience of candidate
+- enrolled_university: Type of University course enrolled if any
+- education_level: Education level of candidate
+- major_discipline :Education major discipline of candidate
+- experience_years: Candidate total experience in years
+- company_size: No of employees in current employer's company
+- company_type : Type of current employer
+- lastnewjob: Difference in years between previous job and current job
+- training_hours: training hours completed
+- change_job: 0 – Not looking for job change, 1 – Looking for a job change
+
+# Introduction
+
+Understanding that this is a classification problem given a set of 10 factored and one continuous variable -  not considering the candidate ID and city code (I figured city code is included within the continuous City Development Index), a classification tree is likely to be the best approach. In using a classification tree, we determine how "well" the model preforms via the error rate and accuracy (James et al, 311). Additionally, there are some advantages to using trees for clarification purposes like being easily interpretable, similar/mirroring human decision making and easily handle qualitative variables (315). There are certain drawbacks to using trees as they can be very non robust and perform poorly when applied to other data sets which can be handled through boosting among other methods.
+
+The approach I've taken is to use a gradient boosting machine (GBM). Boosting works through growing trees sequentially, meaning that each tree is grown from the previous one (321). This helps in the classification by fitting continuously smaller trees to the previously made residuals. The problem and challenge with using a GBM in this approach is the missing values in this data set. Out of the 8000 training values, there are 4,282 incomplete rows ecompassing about 54% of the data!
+
+
+```{r data-intake, echo=FALSE}
+train<-fread("train_sample.csv")
+test <- fread("test_sample.csv")
+submission <- fread("submission.csv")
+
+train[, c("city_id",
+          "gender", 
+          "relevant_experience",
+          "experience_years",
+          "enrolled_university",
+          "education_level",
+          "major_discipline",
+          "company_size",
+          "company_type",
+          "last_new_job",
+          "change_job")] %<>% lapply(., factor)
+
+
+df <- train[complete.cases(train), ] %>% select(-c(V1, uid, city_id))
+df[df == ""] <- NA
+#So many incomplete rows! (4,282)
+
+```
+
+```{r definitions}
+remove.temps <- function(n) {
+  remove(list = c(paste("temp", c(1:n), sep = "")), envir = globalenv())
+}
+
+build_tree <- function(gbm_model, i.tree = 1) {
+    gbm_tree <- gbm::pretty.gbm.tree(gbm_model, i.tree = i.tree)
+    pathString <- c("0" = "0")
+
+    for (node in seq(1, nrow(gbm_tree) - 1)) {
+        if (node %in% gbm_tree$MissingNode[gbm_tree$MissingNode != -1]) {
+            temp_string <- NA
+            # paste(
+            #     pathString[
+            #         which(
+            #             names(pathString) == as.character(
+            #                 which(gbm_tree$MissingNode == node) - 1
+            #             )
+            #         )
+            #     ],
+            #     paste("(M)", node),
+            #     sep = "/"
+            # )
+        } else if (node %in% gbm_tree$LeftNode[gbm_tree$LeftNode != -1]) {
+            temp_string <- paste(
+                pathString[
+                    which(
+                        names(pathString) == as.character(
+                            which(gbm_tree$LeftNode == node) - 1
+                        )
+                    )
+                ],
+                paste("(L)", node),
+                sep = "/"
+            )
+        } else if (node %in% gbm_tree$RightNode[gbm_tree$RightNode != -1]) {
+            temp_string <- paste(
+                pathString[
+                    which(
+                        names(pathString) == as.character(
+                            which(gbm_tree$RightNode == node) - 1
+                        )
+                    )
+                ],
+                paste("(R)", node),
+                sep = "/"
+            )
+        }
+
+        pathString <- append(pathString, temp_string)
+        names(pathString) <- seq(0, length(pathString) - 1)
+    }
+
+    predictors <- gbm_model$var.names
+    names(predictors) <- seq_len(length(predictors))
+    gbm_tree$pathString <- unname(pathString)
+    gbm_data_tree <- data.tree::as.Node(gbm_tree)
+
+    # Plotting
+    data.tree::SetGraphStyle(gbm_data_tree, rankdir = "LR", dpi = 70)
+
+    data.tree::SetEdgeStyle(
+        gbm_data_tree,
+        fontname = "Palatino-italic",
+        labelfloat = TRUE,
+        fontsize = "26",
+        label = function(node) {
+            paste(
+                dplyr::if_else(grepl("(L)", node$name, fixed = TRUE), "<", ">="),
+                formatC(as.numeric(node$SplitCodePred), format = "f", digits = 6)
+            )
+        }
+    )
+
+    # Set node style for all of tree
+    data.tree::SetNodeStyle(
+        gbm_data_tree,
+        fontsize = "26",
+        fontname = function(node) dplyr::if_else(data.tree::isLeaf(node), "Palatino", "Palatino-bold"),
+        height = "0.75",
+        width = "1",
+        shape = function(node) dplyr::if_else(
+            data.tree::isLeaf(node),
+            "box",
+            "diamond"
+        ),
+        label = function(node) dplyr::case_when(
+            data.tree::isLeaf(node) ~ paste("Prediction: ", formatC(as.numeric(node$Prediction), format = "f", digits = 6)), # For leaves
+            node$SplitVar == -1 ~ as.character(unname(predictors[as.character(gbm_tree$SplitVar[1] + 1)])), # For root node
+            TRUE ~ as.character(unname(predictors[as.character(node$SplitVar + 1)])) # For every other node
+        )
+    )
+
+    gbm_data_tree
+}
+
+
+```
+
+
+# Data EDA/Visualization 
+
+Unfortunately, it appears that our data is very uneven once we remove NANs rows! Additionally, it appears when grouping by certain variables, we still have a large amount unevenness in job change, with a significantly higher rate of "No" responses. Because of this uneveness-way more people declining jobs compared to accepting them, I would assume more problems in the tree with model specificity when we approach the modeling process.
+
+```{r data-eda-vis, fig.height=8.5, fig.width=8}
+df_auto_eda <- df
+df_auto_eda <- df_auto_eda[complete.cases(df_auto_eda)]
+
+temp1 <- df_auto_eda %>% 
+  ggplot(aes(x = change_job, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Overall Job Changing") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp2 <- df_auto_eda %>% 
+  ggplot(aes(x = gender, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by Gender") + 
+  scale_fill_manual(name = "Gender", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp3 <- df_auto_eda %>% 
+  ggplot(aes(x = relevant_experience, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by Relevant Experience") + 
+  scale_fill_manual(name = "Experience Level", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp4 <- df_auto_eda %>% 
+  ggplot(aes(x = enrolled_university, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by University Enrollment") + 
+  scale_fill_manual(name = "Enrollment", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp5 <- df_auto_eda %>% 
+  ggplot(aes(x = education_level, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Education", y = "Count", title = "Job Change by Education") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp6 <- df_auto_eda %>% 
+  ggplot(aes(x = major_discipline, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Major", y = "Count", title = "Job Change by Major") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp7 <- df_auto_eda %>% 
+  ggplot(aes(x = experience_years, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Level of Experience", y = "Count", title = "Job Change by Levels of Experience") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp8 <- df_auto_eda %>% 
+  ggplot(aes(x = company_size, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Company Size", y = "Count", title = "Job Change by Company Size") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp9 <- df_auto_eda %>% 
+  ggplot(aes(x = company_type, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Company Type", y = "Count", title = "Job Change by Company Type") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp10 <- df_auto_eda %>% 
+  ggplot(aes(x = last_new_job, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Difference in Years between previous and current job", y = "Count", title = "Job Change by Years Between Previous/Current Job") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp11 <- df_auto_eda %>% 
+  ggplot(aes(x = training_hours, fill = change_job)) + 
+  geom_histogram() + 
+  labs(x = "Training Hours", y = "Count", title = "Job Change by Training Hours") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))  
+
+temp12 <- df_auto_eda %>% 
+  ggplot(aes(x = city_dev_index, fill = change_job)) + 
+  geom_histogram() + 
+  labs(x = "Development Index", y = "Count", title = "Job Change by City Development Index") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1")) 
+
+grid.arrange(temp1, temp2, temp3, temp4, temp5, temp6, temp7, temp8, temp9, temp10, temp11, temp12, ncol = 2)
+
+remove.temps(12)
+
+#Autoplotting-------------------
+#brief look at plots
+# auto_plots <- list()
+# for (i in 1:8){
+#   print(ggplot(df_auto_eda, aes(x = df_auto_eda[[i]], fill = change_job)) + 
+#     geom_bar() + 
+#     labs(x = "", y = "Count", title = i) +
+#     scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Moonrise2")))
+# }
+```
+
+## Dealing with NANs
+
+Because of the unevenness in the data and the large amount of missing values, it is likely beneficial to include them somehow. We have several methods for approaching the NA problem; We could "input" missing values simply as the overall mean of the predictor - this would somewhat balance our data towards the mean, create a dummy variable for "missing" and feed it into the model, or create surrogate variables (Hastie et al, 311). I decided to fabricate the variables from the mean of the overall predictor set as a method to balance the observations and allow parsing to library(gbm). The new generated data EDA shows in Appendix A.
+
+# Model Selection
+
+Originally, I was considering filling the NA values with a $N- (\mu,\sigma^2)$ to add some variation and minimize drawing predictors to their mean; however, I turned to just the mean-fill method to avoid adding further noise. Using the GBM Classification Tree as described above, I fit a model of 5000 trees which, as expected, turned out to be too many (Seen Below)! To deal with this and avoid overfitting to the training set, I used gbm::gbm.pref to return the estimated optimal number of iterations using the cv method (748) - found by determining at what iteration count the trees have the lowest MSE compared to the training error; below we can see the error on test (green line) and the error on train (black line)  over increasing trees. The relative influence can be found in Appendix B. 
+
+```{r  df-conversion}
+#Trees take numerics
+for (i in 1:length(df)){
+  df[[i]] %<>% as.numeric()
+}
+df$change_job <- ifelse(df$change_job == 1, 0, 1)
+#Divergent thoughts - how to fill NAs
+#Draw from a N~(mu, sigma2) - does this introduce more noise to the model?
+#Use only the mean of the data set
+
+#Mean ---------
+mean_df <- df
+for (i in 1:length(mean_df)){
+  mean_df[is.na(mean_df[[i]]), i] <- mean(mean_df[[i]], na.rm = TRUE)
+}
+
+#na removal ---------
+na_removed_df <- df[complete.cases(df)]
+```
+
+```{r modeling-mean-df}
+set.seed(2021)
+mean_df_sample <- sample(dim(mean_df)[1], dim(mean_df)[1]/2)
+mean_df_train <- mean_df[mean_df_sample, ]
+mean_df_test <- mean_df[-mean_df_sample, ]
+mean_test <- as.vector(mean_df[-mean_df_sample, "change_job"])
+
+mean_boost <- gbm(change_job~ ., distribution = "bernoulli", interaction.depth = 4, data = mean_df_train, n.trees = 5000, shrinkage = .01, cv.folds = 5, verbose = F)
+
+best_iteration <- gbm.perf(mean_boost, method = "cv")
+#yhat_mean_boost <- predict(mean_boost, newdata = mean_df_test, n.trees = 748)
+#mean((yhat_mean_boost-mean_df_test$change_job)^2)
+
+opt_pred <- predict(mean_boost, newdata = mean_df_test, n.trees = best_iteration, type = "response")
+opt_pred_cut <- as.factor(ifelse(opt_pred > .37, 1, 0))
+test_change_job <- as.factor(mean_test$change_job)
+
+```
+
+# Model Validation / Evaluation
+
+To validate the model, I split the given train into half and trained the model on the first half, then tested it on the second to generated a confusion matrix (Appendix C). Overall the model preformed well, with an accuracy of 80.25% - 95% confidence intervals being (78.98% and 81.47%) and test MSE of 3.92. Furthermore, as expected, the sensitivity preformed well, and the specificity of the model preformed poorly. For further validation, we can look at the ROC curve (Below) and test the AUC (.7495).
+As a part of evaluation, I also wanted to test if the model would have preformed better if I had dropped the NA values entirely. The NA dropped model (Appendix D) drew roughly the same variable relative influences, but had worse accuracy, specificity and MSE when applied to the held test set.
+
+
+```{r}
+thing <- as.numeric(opt_pred_cut)-1
+
+rocCurve <- roc(mean_df_test$change_job, (as.numeric(opt_pred_cut)-1))
+plot(rocCurve)
+```
+
+# Discussion
+
+As previously mentioned this model has the shortfall of not being able to intake the 54% incomplete rows in the data and instead intakes the mean value of the variable, which artificially stabilizes the data around the mean. Furthermore, the selected model has a difficult time classifying false positives, as conjecture, this is because of the overall imbalance in the predicted variable. However, the model preformed much better than the NA removed model in overall accuracy and specificity/sensitivity. Special thanks to Justin Singh-M from UC Santa Barbara (https://gist.github.com/program--) for the visualization of tree function!
+
+```{r}
+plot(build_tree(mean_boost))
+```
+
+
+# References
+
+Baptiste Auguie (2017). gridExtra: Miscellaneous Functions for "Grid" Graphics. R package version 2.3. https://CRAN.R-project.org/package=gridExtra 
+\
+\
+Matt Dowle and Arun Srinivasan (2020). data.table: Extension of `data.frame`. R package version 1.13.0. https://CRAN.R-project.org/package=data.table
+\
+\
+Brandon Greenwell, Bradley Boehmke, Jay Cunningham and GBM Developers (2020). gbm: Generalized Boosted Regression Models. R package version 2.1.8. https://CRAN.R-project.org/package=gbm
+\
+\
+Trevor Hastie et al., The Elements of Statistical Learning: Data Mining, Inference, and Prediction.
+\
+\
+Gareth James et al., An Introduction to Statistical Learning with Applications in R.
+\
+\
+Max Kuhn (2020). caret: Classification and Regression Training. R package version 6.0-86. https://CRAN.R-project.org/package=caret
+\
+\
+Stefan Milton Bache and Hadley Wickham (2014). magrittr: A Forward-Pipe Operator for R. R package version 1.5. https://CRAN.R-project.org/package=magrittr
+\
+\
+Erich Neuwirth (2014). RColorBrewer: ColorBrewer Palettes. R package version 1.1-2. https://CRAN.R-project.org/package=RColorBrewer
+\
+\
+Karthik Ram and Hadley Wickham (2018). wesanderson: A Wes Anderson Palette Generator. R package version 0.3.6. https://CRAN.R-project.org/package=wesanderson
+\
+\
+Xavier Robin, Natacha Turck, Alexandre Hainard, Natalia Tiberti, Frédérique Lisacek, Jean-Charles Sanchez and Markus Müller (2011). pROC: an open-source package for R and S+ to analyze and compare ROC curves. BMC Bioinformatics, 12, p. 77.  DOI: 10.1186/1471-2105-12-77 <http://www.biomedcentral.com/1471-2105/12/77/>
+\
+\
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software, 4(43), 1686, https://doi.org/10.21105/joss.01686
+
+
+# Appendix
+## A
+
+```{r, fig.height=8.5, fig.width=8}
+mean_df$change_job %<>% as.factor()
+temp1 <- mean_df %>% 
+  ggplot(aes(x = change_job, fill = change_job)) + 
+  geom_bar(aes(fill = change_job)) + 
+  labs(x = "Job Change", y = "Count", title = "Overall Job Changing") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp2 <- mean_df %>% 
+  ggplot(aes(x = gender, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by Gender") + 
+  scale_fill_manual(name = "Gender", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp3 <- mean_df %>% 
+  ggplot(aes(x = relevant_experience, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by Relevant Experience") + 
+  scale_fill_manual(name = "Experience Level", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp4 <- mean_df %>% 
+  ggplot(aes(x = enrolled_university, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Job Change", y = "Count", title = "Job Change by University Enrollment") + 
+  scale_fill_manual(name = "Enrollment", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp5 <- mean_df %>% 
+  ggplot(aes(x = education_level, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Education", y = "Count", title = "Job Change by Education") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp6 <- mean_df %>% 
+  ggplot(aes(x = major_discipline, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Major", y = "Count", title = "Job Change by Major") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp7 <- mean_df %>% 
+  ggplot(aes(x = experience_years, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Level of Experience", y = "Count", title = "Job Change by Levels of Experience") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp8 <- mean_df %>% 
+  ggplot(aes(x = company_size, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Company Size", y = "Count", title = "Job Change by Company Size") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp9 <- mean_df %>% 
+  ggplot(aes(x = company_type, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Company Type", y = "Count", title = "Job Change by Company Type") + 
+  scale_fill_manual(name = "Job Change", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp10 <- mean_df %>% 
+  ggplot(aes(x = last_new_job, fill = change_job)) + 
+  geom_bar() + 
+  labs(x = "Difference in Years between previous and current job", y = "Count", title = "Job Change by Years Between Previous/Current Job") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))
+
+temp11 <- mean_df %>% 
+  ggplot(aes(x = training_hours, fill = change_job)) + 
+  geom_histogram() + 
+  labs(x = "Training Hours", y = "Count", title = "Job Change by Training Hours") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1"))  
+
+temp12 <- mean_df %>% 
+  ggplot(aes(x = city_dev_index, fill = change_job)) + 
+  geom_histogram() + 
+  labs(x = "Development Index", y = "Count", title = "Job Change by City Development Index") + 
+  scale_fill_manual(name = "Years", labels = c("No", "Yes"), values = wes_palette(n = 2, "Chevalier1")) 
+
+grid.arrange(temp1, temp2, temp3, temp4, temp5, temp6, temp7, temp8, temp9, temp10, temp11, temp12, ncol = 2)
+
+remove.temps(12)
+```
+
+
+## B
+```{r}
+summary(mean_boost)
+```
+
+## C
+```{r}
+confusionMatrix(opt_pred_cut, test_change_job)
+```
+## D
+```{r na-removed-df}
+na_removed_df_sample <- sample(dim(na_removed_df)[1], dim(na_removed_df)[1]/2)
+na_removed_df_train <- na_removed_df[na_removed_df_sample, ]
+na_removed_df_test <- na_removed_df[-na_removed_df_sample, ]
+na_removed_test <- as.vector(na_removed_df[-na_removed_df_sample, "change_job"])
+
+na_removed_boost <- gbm(change_job~ ., distribution = "bernoulli", interaction.depth = 4, data = na_removed_df_train, n.trees = 5000, shrinkage = .01, cv.folds = 5, verbose = F)
+summary(na_removed_boost)
+yhat_na_removed_boost <- predict(na_removed_boost, newdata = na_removed_df_test, n.trees = 5000)
+
+mean((yhat_na_removed_boost-na_removed_df_test$change_job)^2)
+
+best_na_removed_iteration <- gbm.perf(na_removed_boost, method = "cv")
+
+na_removed_opt_pred <- predict(na_removed_boost, newdata = na_removed_df_test, n.trees = best_na_removed_iteration, type = "response")
+na_removed_opt_pred_cut <- as.factor(ifelse(na_removed_opt_pred > .35, 1, 0))
+na_removed_test_change_job <- as.factor(na_removed_df_test$change_job)
+
+confusionMatrix(na_removed_opt_pred_cut, na_removed_test_change_job)
+```
+
+```{r}
+#Time to send to the full test!
+test[, c("city_id",
+          "gender", 
+          "relevant_experience",
+          "experience_years",
+          "enrolled_university",
+          "education_level",
+          "major_discipline",
+          "company_size",
+          "company_type",
+          "last_new_job")] %<>% lapply(., factor)
+
+
+test <- test[complete.cases(test), ] %>% select(-c(V1, city_id))
+
+
+for (i in 1:length(test)){
+  test[[i]] %<>% as.numeric()
+}
+
+#Mean ---------
+for (i in 1:length(test)){
+  test[is.na(test[[i]]), i] <- mean(test[[i]], na.rm = TRUE)
+}
+
+
+test_pred <- predict(mean_boost, newdata = test, n.trees = best_iteration, type = "response")
+test_pred <- ifelse(test_pred > .37, 1, 0)
+
+submission$change_job <- test_pred
+submission %<>% select(-c(V1))
+write.csv(submission, "submission.csv")
+```
+

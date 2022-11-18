@@ -1,0 +1,321 @@
+---
+title: "SEER"
+author: "Ryan O'Dea, Alison Pedraza, Anna Cook, Bruce Mallory"
+date: "4/12/2021"
+output: html_document
+---
+```{r setup}
+pacman::p_load(tidyverse,
+               magrittr,
+               RColorBrewer,
+               data.table,
+               xgboost,
+               Matrix,
+               rpart,
+               rpart.plot)
+```
+
+```{r data-loading}
+#library(readxl)
+#raw <- read_excel("Health_Literacy_Transformed_Data.xlsx",
+#                  sheet = "Transformed")
+#
+#write.csv(raw, file = "Transformed Data.csv")
+raw <- fread("Transformed Data.csv")
+
+```
+
+```{r mutation}
+dataframe <- raw %>%
+  mutate(across(.cols = c(Sex,
+                          Race,
+                          Insurance,
+                          `SEER Registry`,
+                          `AJCC 7 Stage`,
+                          `Lymph Nodes`,
+                          Mets,
+                          `Cause of Death`,
+                          `Surgery Performed?`,
+                          `Surgery Decision`,
+                          Radiation,
+                          Chemotherapy), factor),
+         size = Size,
+         id = `Study ID`,
+         sex = Sex,
+         year = `Year of Diagnosis`,
+         age = `Age at Diagnosis`,
+         race = Race,
+         insurance = Insurance,
+         location = `SEER Registry`,
+         pct_9th_grade = `% <9th Grade Education`,
+         pct_hs = `% <High School Education`,
+         pct_ba = `% <Bachelors Education`,
+         pct_poverty = `% Persons Below Poverty`,
+         pct_unemployed = `% Unemployed ACS 2013-2017`,
+         med_income = `Median Household Income`,
+         pct_language_isolation = `% Language isolation ACS 2013-2017 (households)`,
+         site = Site,
+         subsite = Subsite,
+         stage = `AJCC 7 Stage`,
+         lymph_nodes = `Lymph Nodes`,
+         mets = Mets,
+         cause_of_death = `Cause of Death`,
+         surg_performed = `Surgery Performed?`,
+         surg_decision = `Surgery Decision`,
+         radiation = Radiation,
+         chemo = Chemotherapy) %>% 
+  select(-c(Size,
+            `Study ID`,
+            Sex,
+            `Year of Diagnosis`,
+            `Age at Diagnosis`,
+            Race,
+            Insurance,
+            `SEER Registry`,
+            `% <9th Grade Education`,
+            `% <High School Education`,
+            `% <Bachelors Education`, 
+            `% Persons Below Poverty`,
+            `% Unemployed ACS 2013-2017`, 
+            `Median Household Income`,
+            `% Language isolation ACS 2013-2017 (households)`,
+            Site,
+            Subsite,
+            `AJCC 7 Stage`,
+            `Lymph Nodes`,
+            Mets,
+            `Cause of Death`,
+            `Surgery Performed?`,
+            `Surgery Decision`,
+            Radiation,
+            Chemotherapy)) %>%
+  as.data.frame() %>%
+  filter(., stage != "IVNOS")
+```
+
+```{r intro-vis}
+vis_labels <- levels(dataframe$stage)
+vis_frame <- dataframe %>%
+  mutate(stage = as.numeric(stage))
+#-----------------------------------------------------------------------------
+vis_frame %>%
+  ggplot(aes(x = sex, y = stage, fill = sex)) + 
+  geom_violin(alpha = .4) + 
+  scale_y_discrete(limits = factor(c(1:length(vis_labels))), labels = vis_labels) + 
+  labs(title = "Head/Neck Cancer Stage by Sex",
+       subtitle = "SEER Data Set",
+       x = "",
+       y = "Cancer Stage",
+       fill = "") + 
+  scale_fill_brewer(palette = "Dark2")
+ggsave("stage_sex.png", plot = last_plot(),
+       height = 12, width = 15, dpi = 300)
+  
+vis_frame %>%
+  ggplot(aes(x = cause_of_death, y = stage, fill = cause_of_death)) + 
+  geom_violin(alpha = .4) + 
+  scale_y_discrete(limits = factor(c(1:length(vis_labels))), labels = vis_labels) + 
+  labs(title = "Head/Neck Cancer Stage by Cause of Death",
+       subtitle = "SEER Data Set",
+       x = "",
+       y = "Cancer Stage",
+       fill = "") + 
+  scale_fill_brewer(palette = "Dark2") + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+ggsave("stage_cod.png", plot = last_plot(),
+       height = 12, width = 15, dpi = 300)
+
+vis_frame %>%
+  ggplot(aes(x = surg_status, y = stage, fill = surg_status)) + 
+  geom_violin(alpha = .4) + 
+  scale_y_discrete(limits = factor(c(1:length(vis_labels))), labels = vis_labels) + 
+  labs(title = "Head/Neck Cancer Stage by Surgery Y/N",
+       subtitle = "SEER Data Set",
+       x = "",
+       y = "Cancer Stage",
+       fill = "") + 
+  scale_fill_brewer(palette = "Dark2")
+ggsave("stage_surg-status.png", plot = last_plot(),
+       height = 12, width = 15, dpi = 300)
+
+vis_frame %>%
+  ggplot(aes(x = surg_decision, y = stage, fill = surg_decision)) + 
+  geom_violin(alpha = .4) + 
+  scale_y_discrete(limits = factor(c(1:length(vis_labels))), labels = vis_labels) + 
+  labs(title = "Head/Neck Cancer Stage by Surgery Decision",
+       subtitle = "SEER Data Set",
+       x = "",
+       y = "Cancer Stage",
+       fill = "") + 
+  scale_fill_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 5))
+ggsave("stage_surg-decision.png", plot = last_plot(),
+       height = 12, width = 15, dpi = 300)
+
+vis_frame %>%
+  ggplot(aes(x = location, y = stage, fill = location)) + 
+  geom_violin(alpha = .4) + 
+  scale_y_discrete(limits = factor(c(1:length(vis_labels))), labels = vis_labels) + 
+  labs(title = "Head/Neck Cancer Stage by Location",
+       subtitle = "SEER Data Set",
+       x = "",
+       y = "Cancer Stage",
+       fill = "") + 
+  scale_fill_brewer(palette = "Dark2")
+ggsave("stage_location.png", plot = last_plot(),
+       height = 12, width = 15, dpi = 300)
+```
+
+```{r gradient-boosting}
+set.seed(2021)
+train_ind <- sample(seq_len(nrow(dataframe)), round(nrow(dataframe)*0.75))
+
+train <- dataframe[train_ind, ]
+test <- dataframe[-train_ind, ]
+
+
+#Train Model -----------------------
+
+  set.seed(2021)
+  train_frame <- train %>% 
+    mutate(surg_performed = ifelse(surg_performed == "Yes", 1, 0))
+  
+  y_train <- train_frame$surg_performed
+  
+  #Tuning Matrix ----------------------
+  tuning_df <- train_frame %>% 
+    mutate(across(.cols = c(sex,
+                            race,
+                            age,
+                            insurance,
+                            mets,
+                            lymph_nodes,
+                            stage,
+                            location),
+                  as.numeric))
+
+  
+  
+  
+  
+  tune_matrix <- sparse.model.matrix(surg_performed ~ 
+                                       stage + 
+                                       sex + 
+                                       race + 
+                                       age + 
+                                       insurance + 
+                                       mets + 
+                                       lymph_nodes + 
+                                       location,
+                                     data = tuning_df,
+                                     contrasts.arg = c("surg_performed",
+                                                       "stage",
+                                                       "race",
+                                                       "age",
+                                                       "insurance",
+                                                       "mets",
+                                                       "lymph_nodes",
+                                                       "location"),
+                                     sparse = FALSE,
+                                     sci = FALSE)
+  
+  hyper_grid <- expand_grid(eta = c(0.01, 0.05, 0.1, 0.3),
+                            max_depth = c(1, 3, 5, 7),
+                            min_child_weight = c(1, 3, 5, 7),
+                            subsample = c(0.65, 0.8, 1),
+                            colsample_bytree = c(0.8, 0.9, 1),
+                            gamma = c(0.1, 0.3, 0.5, 0.7),
+                            optimal_trees = 0,
+                            min_RMSE = 0)
+  
+  #Grid Search --------------------------
+  for (i in 1:nrow(hyper_grid)) {
+    parameters <- list(
+      eta = hyper_grid$eta[i],
+      max_depth = hyper_grid$max_depth[i],
+      min_child_weight = hyper_grid$min_child_weight[i],
+      subsample = hyper_grid$subsample[i],
+      colsample_bytree = hyper_grid$colsample_bytree[i],
+      gamma = hyper_grid$gamma[i]
+    )
+    
+    set.seed(2021)
+    
+    #Training ------------------------
+    xgb_tune <- xgb.cv(
+      params = parameters,
+      data = tune_matrix,
+      label = y_train,
+      nrounds = 5000,
+      nfold = 5,
+      objective = "reg:logistic",
+      verbose = 0,
+      early_stopping_rounds = 100)
+    
+    hyper_grid$optimal_trees[i] <- which.min(xgb_tune$evaluation_log$test_rmse_mean)
+    hyper_grid$min_RMSE[i] <- min(xgb_tune$evaluation_log$test_rmse_mean)
+    
+  }
+  #Optimal Hyper-params Grid ----------------------
+  hyper_grid %>%
+    arrange(min_RMSE) %>%
+    head(10)
+  
+  ## Grid --------------------------------------------
+  nrounds <- 1435
+  
+  parameters <- list(
+    eta = 0.5,
+    max_depth = 3,
+    min_child_weight = 3,
+    subsample = 1,
+    colsample_bytree = 0.8,
+    gamma = 0.5
+  )
+  
+  xgb_model <- xgboost(
+    params = parameters,
+    data = tune_matrix,
+    label = y_train,
+    nrounds = nrounds,
+    objective = "reg:logistic",
+    verbose = 0
+  )
+  
+  importance_matrix <- xgb.importance(model = xgb_model)  
+  xgb.plot.importance(importance_matrix, measure = "Gain")
+  
+  return(xgb_model)
+
+
+xgb.plot.multi.trees(model = xgb_model, feature_names = colnames(tune_matrix))
+DiagrammeR::export_graph(tree, "xgb_tree.png", width = 3000, height = 4000)
+tree
+
+png("decision_tree.png",
+    width = 1080, height = 720, units = "px")
+rpart.plot(
+  rpart(
+    surg_performed ~ 
+      stage + 
+      sex + 
+      race + 
+      age + 
+      insurance + 
+      mets + 
+      lymph_nodes + 
+      location,
+    data = dataframe,
+    cp = 0.0015
+  )
+)
+
+dev.off()
+```
+
+
+

@@ -1,0 +1,122 @@
+---
+title: "585-Final-rmd"
+author: "Ryan O'Dea"
+date: "4/30/2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+pacman::p_load(
+  ggplot2,
+  tidyverse,
+  forecast,
+  tseries,
+  timeDate,
+  astsa
+)
+```
+
+# Data Intake  
+
+Taken from the [Federal Reserve Economics Data Database](https://fred.stlouisfed.org/series/TOTBKCR), the data chosen was the total bank credit (TBC) of all commercial banks. The TBC is the total amount of credit available to individuals or buisnesses from a banking institution and was measured in billions of USD. The  Data was taken weekly at the end of every Wednesday, from January 3, 1973 to April 1, 2020.  
+The data had no noticeable outliers and contained every weekly data point. Two noticeable events during presented in the data were the 2009 banking crisis and the current COVID-19 pandemic. To garner a look at TBC without these two breakpoint events, a window between January 2012 and December 2019 was created and used henceforth.
+
+```{r data-intake}
+#Raw intake
+cred <- read.csv("TOTBKCR.csv")
+
+#TS coercion and subsetting
+credts <- ts(cred$TOTBKCR, frequency = 52, start=c(1973,1))
+window <- window(credts, 2012, 2019, 52)
+
+ 
+```
+
+```{r generic-plotting}
+window %>% 
+  autoplot() + 
+  labs(title = "2012 - 2019 Total Banking Credit Availability",
+       subtitle = "Data Source: https://fred.stlouisfed.org/series/TOTBKCR",
+       ylab = "Billions USD")
+```
+
+# Decomposing the Data
+
+The data were decomposed and we observed a clear linear trend line with a clear yearly seasonal pattern.
+
+```{r decomposition}
+#There appears to be a linear and seasonal trend, differencing twice is probable
+decomp_win <- decompose(window)
+decomp_win %>% 
+  plot()
+```
+
+# Differencing 
+
+The data were differenced twice to remove both the seasonality and linear trend components. Plotting the ACF and the PACF of the data yielded a PACF that decayed to zero and an ACF that appears to drop off after lag two or decay to zero. This makes possible models: ARIMA(0,2,2) or a low order, twice differenced ARIMA model. Utilizing the auto.arima function in R resulted in an ARIMA(2,2,2) model with $\phi_1= -.9539$ and $\phi_2=-.0391$ ; $\theta_1= -.0596$ and $\theta_2=-.8414$ ; $\Phi_1 = .0092$ or $x_t+.9408x_{t-1}+.0423x_{t-2}=e_t-.0768e_{t-1}-.8238e_{t-2}$
+
+```{r differencing-data}
+twice_dif <- diff(diff(window))
+twice_dif %>%
+  autoplot() +
+  labs(title = "2012 - 2019 Twice Differenced Total Banking Credit Availability",
+       subtitle = "Data Source: https://fred.stlouisfed.org/series/TOTBKCR")
+
+twice_dif %>%
+  ggAcf() + 
+  labs(title = "Twice Differenced TBC Availability ACF")
+
+twice_dif %>%
+  ggPacf() + 
+  labs(title = "Twice Differenced TBC Availability ACF")
+
+#PACF appears to decay to zero, ACF roughly drops after lag one, but also shows non exponential decay with some lags spiking over the bounds.
+#Possible a low order SARIMA model
+```
+
+# (S)ARIMA Processing
+
+```{r arima-processing, results='hide'} 
+auto_arima <- auto.arima(window)
+#Appears to be a SARIMA(2,2,2) X (1,0,0) process 
+sarima_window <- invisible(sarima(window, 2, 2, 2, 1, 0, 0, 12))
+
+arima_fit <- Arima(window, order = c(2, 2, 2), seasonal = c(1, 0, 0))
+arima_fcast <- forecast(arima_fit, h =52)
+```
+
+# Forecasting
+## ARIMA Forecasting
+
+```{r}
+arima_fcast %>%
+  autoplot() + 
+  labs(title = "TBC Forecast from SARIMA (2,2,2)x(1,0,0)[52]",
+       subtitle = "Data Source: https://fred.stlouisfed.org/series/TOTBKCR") + 
+  ylab("Billions USD")
+
+auto_arima
+```
+
+## Holt-Winters Forecasting Method
+
+```{r HW-forecasting}
+#Holt-Winters forecast
+hw_fit <- HoltWinters(window, seasonal = "multiplicative")
+hw_fcast <- forecast(hw_fit, h=52)
+
+hw_fcast %>%
+  autoplot() + 
+  labs(title = "TBC: HoltWinters Forecast",
+       subtitle = "Data Source: https://fred.stlouisfed.org/series/TOTBKCR") + 
+  ylab("Billions USD")
+```
+
+

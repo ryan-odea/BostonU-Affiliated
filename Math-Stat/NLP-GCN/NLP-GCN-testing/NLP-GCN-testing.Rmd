@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: "Ryan O'Dea"
+---
+
+```{r setup}
+pacman::p_load(tidyverse,
+               twitteR,
+               tidytext,
+               data.table,
+               textdata,
+               syuzhet)
+```
+
+```{r twitter-auth}
+consumer_key <- "i3UoJRatien969R68lvVx0vCz"
+consumer_secret <- "Rm1Nq9FcUqjjxNbJZmaUz4JyaaummuG9bLEcpgVZdsYPri1WSI"
+access_token <- "1278462310797971456-S26QReQs9gwYInSgniq2bsJKsPvfXg"
+access_secret <- "TIvwBeakSkNoipY1u0BIAuKBXAC8rjoaykCxp8jKxs8in"
+
+options(httr_oauth_cache = TRUE)
+setup_twitter_oauth(consumer_key, consumer_secret, access_token, access_secret)
+
+#regenerate tokens
+```
+```{r twitter-scraping}
+sciencetweets <- searchTwitter("#Science", n = 10000, lang = "en")
+twitter_df <- fread("twitter_df.csv") #twListToDF(sciencetweets)
+
+tweet_words <- twitter_df %>% select(c(id, text)) %>% unnest_tokens(word, text)
+
+```
+
+```{r intro-eda}
+#from https://utstat.toronto.edu/~nathan/teaching/sta4002/Class1/scrapingtwitterinR-NT.html
+
+my_stop_words <- stop_words %>% select(-lexicon) %>% 
+  bind_rows(data.frame(word = c("https", "t.co", "rt", "amp", "a", "on", "is", "the", "have", "science", "fe0f", "bylilyv")))
+
+interesting_words <- tweet_words %>% anti_join(my_stop_words)
+
+interesting_words %>% group_by(word) %>% tally(sort = TRUE) %>% slice(1:25) %>%
+  ggplot(aes(x = reorder(word, n, function(n) -n), y = n)) + 
+  geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Top 25 Words of #Science on 3/8/21", subtitle = "Source: Twitter", x = "", y = "Count")
+
+
+bing_lex <- get_sentiments("bing")
+sentiment_df <- interesting_words %>% left_join(bing_lex)
+sentiment_df %>% filter(!is.na(sentiment)) %>% group_by(sentiment) %>% summarise(n=n()) 
+
+
+
+PerfectRootCheck <- function(input){
+  n <- as.integer(input)
+  root <- sqrt(n)
+  response <- ifelse(as.integer(root + .5)**2 == n, "is a perfect square", "is not a perfect square")
+  return(paste(n, response))
+}
+
+PerfectRootCheck(12)
+```
+

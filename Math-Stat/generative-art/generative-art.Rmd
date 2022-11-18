@@ -1,0 +1,64 @@
+---
+title: "Generative Art"
+author: "Ryan O'Dea"
+date: "4/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+install.packages(ggplot2)
+install.packages(magrittr)
+install.packages(purrr)
+install.packages(dplyr)
+#library(tidyverse)
+#library(ggthemes)
+
+devtools::install_github("cutterkom/generativeart")
+
+
+#library(generativeart)
+```
+
+```{r}
+#from documentation
+# set the paths
+IMG_DIR <- "img/"
+IMG_SUBDIR <- "everything/"
+IMG_SUBDIR2 <- "handpicked/"
+IMG_PATH <- paste0(IMG_DIR, IMG_SUBDIR)
+
+LOGFILE_DIR <- "logfile/"
+LOGFILE <- "logfile.csv"
+LOGFILE_PATH <- paste0(LOGFILE_DIR, LOGFILE)
+
+# create the directory structure
+generativeart::setup_directories(IMG_DIR, IMG_SUBDIR, IMG_SUBDIR2, LOGFILE_DIR)
+
+# include a specific formula, for example:
+my_formula <- list(
+  x = quote(rnorm(1, -1, 1) * x_i^2 - sin(y_i^2) * sin(3*y_i^2)),
+  y = quote(3-(runif(1, -1, 1) * y_i^3 - cos(x_i^2)))
+)
+
+generativeart::generate_img(formula = my_formula, nr_of_img = 5, polar = TRUE, filetype = "png", color = "#c1a06e" , background_color = "#1a3657")
+```
+```{r, fig.width=8, fig.height=2}
+
+value <- 3*-sin(2*seq(0,4*pi,,120))+2*runif(120)
+jitter_sin <- data.frame(1:120)
+jitter_sin[, 2] <- value
+
+jitter_sin %>% 
+  ggplot(aes(x = X1.120, y = V2)) + 
+  geom_path() + 
+  theme_fivethirtyeight() + 
+  geom_hline(yintercept = 0) + 
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) + 
+  xlim(0, 113)
+
+ma <- t(matrix(c(.1, .2, .7, .2, .2, .6, .6, .1, .3), nrow = 3))
+ma
+```
+
+

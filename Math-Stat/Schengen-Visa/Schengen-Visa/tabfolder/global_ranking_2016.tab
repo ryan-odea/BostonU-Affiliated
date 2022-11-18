@@ -1,0 +1,200 @@
+country, ranking, access 
+Germany , 1 ,177
+Sweden , 2 ,176
+Finland , 3 ,175
+France , 3 ,175
+Italy , 3 ,175
+Spain , 3 ,175
+United Kingdom , 3 ,175
+Belgium , 4 ,174
+Denmark , 4 ,174
+Netherlands , 4 ,174
+United States , 4 ,174
+Austria , 5 ,173
+Japan , 5 ,173
+Singapore , 5 ,173
+Canada , 6 ,172
+Ireland , 6 ,172
+Luxembourg , 6 ,172
+Norway , 6 ,172
+Portugal , 6 ,172
+South Korea , 6 ,172
+Switzerland , 6 ,172
+Greece , 7 ,171
+New Zealand , 7 ,171
+Australia , 8 ,169
+Malta , 9 ,168
+Czech Republic , 10 ,167
+Hungary , 10 ,167
+Iceland , 10 ,167
+Slovakia , 11 ,165
+Liechtenstein , 12 ,164
+Malaysia , 12 ,164
+Slovenia , 12 ,164
+Latvia , 13 ,163
+Estonia , 14 ,162
+Lithuania , 14 ,162
+Poland , 15 ,161
+Monaco , 16 ,160
+Cyprus , 17 ,159
+San Marino , 18 ,156
+Chile , 19 ,155
+Hong Kong (SAR China) , 20 ,154
+Brazil , 21 ,153
+Bulgaria , 21 ,153
+Romania , 21 ,153
+Andorra , 22 ,152
+Argentina , 22 ,152
+Brunei , 23 ,151
+Croatia , 24 ,149
+Israel , 25 ,147
+Barbados , 26 ,141
+Bahamas , 27 ,140
+Mexico , 28 ,139
+Taiwan , 29 ,137
+Uruguay , 29 ,137
+Antigua and Barbuda , 30 ,134
+Vatican City , 30 ,134
+Seychelles , 31 ,133
+St. Kitts and Nevis , 32 ,132
+Venezuela , 32 ,132
+Costa Rica , 33 ,131
+Trinidad and Tobago , 34 ,130
+Mauritius , 35 ,128
+Panama , 36 ,127
+Paraguay , 37 ,125
+St. Lucia , 37 ,125
+St. Vincent and the Grenadines , 37 ,125
+United Arab Emirates , 38 ,122
+Grenada , 39 ,121
+Macao (SAR China) , 40 ,120
+Dominica , 41 ,119
+Honduras , 41 ,119
+Guatemala , 42 ,116
+El Salvador , 43 ,115
+Serbia , 43 ,115
+Samoa , 44 ,112
+North Macedonia ,45 , 
+Nicaragua , 46 ,110
+Tonga , 46 ,110
+Vanuatu , 46 ,110
+Montenegro , 47 ,107
+Russian Federation , 48 ,105
+Palau Islands ,49,  
+Colombia , 50 ,103
+Turkey , 51 ,102
+Bosnia and Herzegovina , 52 ,101
+Moldova , 52 ,101
+Albania , 53 ,98
+South Africa , 54 ,97
+Belize , 55 ,94
+Peru , 56 ,86
+Solomon Islands , 56 ,86
+Guyana , 57 ,82
+Kuwait , 57 ,82
+Timor-Leste ,57 , 
+Tuvalu , 57 ,82
+Ecuador , 58 ,81
+Fiji , 58 ,81
+Ukraine , 58 ,81
+Maldives , 59 ,80
+Nauru , 59 ,80
+Kiribati , 60 ,79
+Marshall Islands , 60 ,79
+Qatar , 60 ,79
+Jamaica , 61 ,78
+Papua New Guinea , 62 ,77
+Micronesia , 63 ,75
+Suriname , 64 ,74
+Bahrain , 65 ,73
+Bolivia , 66 ,72
+Botswana , 66 ,72
+Oman , 67 ,71
+Thailand , 67 ,71
+Namibia , 68 ,70
+Lesotho , 69 ,69
+Saudi Arabia , 69 ,69
+Kenya , 70 ,68
+Belarus , 71 ,67
+Gambia , 71 ,67
+Georgia , 71 ,67
+Kazakhstan , 71 ,67
+Malawi , 71 ,67
+Eswatini (Swaziland) , 71 ,67
+Tanzania , 72 ,65
+Tunisia , 72 ,65
+Ghana , 73 ,64
+Zambia , 74 ,63
+Azerbaijan , 75 ,62
+Cape Verde Islands ,76 , 
+Philippines , 76 ,61
+Uganda , 77 ,60
+Benin , 78 ,59
+Cuba , 78 ,59
+Morocco , 78 ,59
+Zimbabwe , 78 ,59
+Indonesia , 79 ,58
+Kyrgyzstan , 79 ,58
+Armenia , 80 ,57
+Burkina Faso , 81 ,56
+Cote d'Ivoire (Ivory Coast) , 81 ,56
+Mongolia , 81 ,56
+Mauritania , 82 ,55
+Niger , 82 ,55
+Senegal , 82 ,55
+Togo , 82 ,55
+Dominican Republic , 83 ,54
+Sao Tome and Principe , 83 ,54
+Tajikistan , 84 ,53
+India , 85 ,52
+Mali , 85 ,52
+Uzbekistan , 85 ,52
+Bhutan , 86 ,51
+Guinea-Bissau , 86 ,51
+Mozambique , 86 ,51
+Sierra Leone , 86 ,51
+Cambodia , 87 ,50
+China , 87 ,50
+Chad , 88 ,49
+Egypt , 88 ,49
+Gabon , 88 ,49
+Turkmenistan , 88 ,49
+Algeria , 89 ,48
+Central African Republic , 89 ,48
+Haiti , 89 ,48
+Madagascar , 89 ,48
+Rwanda , 89 ,48
+Comores Islands ,90 , 
+Jordan , 90 ,47
+Laos , 90 ,47
+Vietnam , 90 ,47
+Guinea , 91 ,46
+Angola , 92 ,45
+Cameroon , 92 ,45
+Equatorial Guinea , 92 ,45
+Nigeria , 92 ,45
+Congo (Rep.) , 93 ,44
+Djibouti , 93 ,44
+Liberia , 94 ,43
+Burundi , 95 ,42
+Myanmar , 95 ,42
+North Korea , 95 ,42
+Bangladesh , 96 ,39
+Congo (Dem. Rep.) , 96 ,39
+Lebanon , 96 ,39
+Sri Lanka , 96 ,39
+Kosovo , 97 ,38
+South Sudan , 97 ,38
+Yemen , 97 ,38
+Eritrea , 98 ,37
+Ethiopia , 98 ,37
+Iran , 98 ,37
+Nepal , 98 ,37
+Palestinian Territory , 98 ,37
+Sudan , 98 ,37
+Libya , 99 ,36
+Syria , 100 ,32
+Somalia , 101 ,31
+Iraq , 102 ,30
+Pakistan , 103 ,29
+Afghanistan , 104 ,25

@@ -1,0 +1,425 @@
+---
+title: "Analysis of Seattle's AirBnB Data"
+author: |
+  | Ryan O'Dea
+  | Boston University GRS MA678
+subtitle: https://github.com/ryan-odea/678-AirBnB-Analysis
+output:
+  pdf_document:
+    fig_caption: true
+---
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+pacman::p_load(
+  ggplot2,
+  dplyr,
+  tidyverse,
+  sf,
+  choroplethrZip,
+  data.table,
+  maps,
+  rgdal,
+  maptools,
+  sp,
+  rgdal,
+  VGAM,
+  MASS,
+  forecast,
+  boot,
+  lme4,
+  arm,
+  caTools
+  )
+```
+
+```{r Data_Setup, include=FALSE}
+listings <- read.csv("listings.csv")
+listings$price <- as.numeric(gsub("[$]", "", listings$price))
+listings$host_is_superhost = ifelse(listings$host_is_superhost == "t", TRUE, FALSE)
+
+listings <- subset(listings, select = c(
+  'price', 
+  'host_is_superhost', 
+  'neighbourhood_group_cleansed',
+  'room_type',
+  'property_type',
+  'availability_30',
+  'availability_60',
+  'availability_90',
+  'availability_365',
+  "longitude",
+  "latitude"
+  ))
+#Reverse Geocoding and Binding Zip/postal codes to our data frame 
+zips <- readOGR(dsn = "cb_2015_us_zcta510_500k", layer = "cb_2015_us_zcta510_500k")
+zips_transform <- spTransform(zips, CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+longlat <- listings[,c(10,11)]
+spdf <- SpatialPointsDataFrame(coords = longlat, data = listings, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+zips_subset <- zips_transform[spdf, ]
+
+listings$zipcode <- over(spdf, zips_subset[, "ZCTA5CE10"])
+listings$zipcode <- as.vector(listings$zipcode$ZCTA5CE10)
+
+listings <- listings %>%
+  rename(
+    superhost = host_is_superhost,
+    neighborhood = neighbourhood_group_cleansed,
+    type = room_type,
+    avail_30 = availability_30,
+    avail_60 = availability_60,
+    avail_90 = availability_90,
+    avail_365 = availability_365,
+  )
+listings <- listings[complete.cases(listings), ]
+listings <- subset(listings, type != "Hotel room")
+listings <- subset(listings, type != "Shared room")
+listings <- subset(listings, price < 500)
+
+breaks <- c(0, 100, 200, 300, 400, 500)
+labels <- c("(0-100]", "(100-200]", "(200-300]", "(300-400]", "(400-500]")
+
+listings$price_group <- cut(listings$price,
+                            breaks = breaks,
+                            include.lowest = TRUE,
+                            right = FALSE,
+                            labels = labels)
+
+#Neighborhood Grouping
+listings$neighborhood_group = rep(NA, length(listings$neighborhood))
+listings$number <- row.names(listings)
+
+listings$neighborhood_group[listings$neighborhood %in% c("Interbay",
+                                                         "Magnolia", 
+                                                         "University District", 
+                                                         "Queen Anne")] <- "Northern Suburbs"
+
+listings$neighborhood_group[listings$neighborhood %in% c("Seward Park",
+                                                         "Rainier Valley")] <- "Southeastern Seattle"
+
+listings$neighborhood_group[listings$neighborhood %in% c("Lake City", 
+                                                         "Northgate", 
+                                                         "Ballard")] <- "Northgate Area"
+
+listings$neighborhood_group[listings$neighborhood %in% c("Capitol Hill", 
+                                                         "Downtown", 
+                                                         "Beacon Hill", 
+                                                         "Cascade", 
+                                                         "Central Area")] <- "Downtown Area"
+
+listings$neighborhood_group[listings$neighborhood %in% c("Delridge", 
+                                                         "West Seattle")] <- "Southwestern Seattle"
+
+listings$neighborhood_group[listings$neighborhood %in% c("Other neighborhoods")] <- "Other Neighborhoods"
+listings$neighborhood_group <- as.factor(listings$neighborhood_group)
+
+map <- map_data("county")
+```
+
+```{r Beginning_EDA, fig.height=3.75, fig.cap="General overview of price vs host ID if AirBnB's in the Seattle Area (King County)"}
+#Data Exploration by taking index/ID of the AirBnB vs Price
+listings %>%
+  ggplot(aes(x = number, y = price, col = superhost)) + 
+  geom_point() + 
+  facet_wrap(~neighborhood_group) + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) + 
+  labs(col = "Super Host", y = "Price", title = "Analysis of Seattle's AirBnB Data", x = "ID") 
+```
+
+# Abstract
+
+Begun in August of 2008, AirBnB is an American vacation rental marketplace. Without owning any of the real estate listings, AirBnB connects hosts, users that are willing to share their home for payment, to guests. With data scraped from InsideAirbnb This project seeks to understand the relationship between how a host will price their home or single room in the Seattle area compared to factors of location, type of room being offered, and if the host is considered a Super Host, someone who AirBnB has designated as providing a "shining example for other hosts." In figure 1, we can observe a very noisy data set when simply plotting of listing ID vs price; however, there are some key takeaways. It appears many of the listings are in the Downtown Area and we generally see a trend around $100 per night in most of the areas. Later in this paper we will explore relationships via grouping to make better sense of our noisy data set.
+
+
+\newpage
+
+
+# Basic EDA
+## Introductory Analysis
+
+With the beginning exploratory data analysis, we can confirm that many rooms are in the Downtown Area (figure 2) and renting an entire home/apartment is generally more expensive than renting a private room with the average entire home/apt with a mean of \$136 per night while private rooms are about half with a mean of \$68. (Figure 3) We also observe that most listings are full home/apt options with few private rooms available. As conjecture, this could be attributed to the COVID-19 pandemic - less hosts want to invite users into their homes while they are there and would like to have little contact with them.
+
+```{r EDA_Comparisons, fig.width=10, fig.height=5, fig.cap="Overview of listings per neighborhood, split into Entire Home/Apt and Private Room"}
+#Mapview
+locations <- st_as_sf(listings, coords = c("longitude", "latitude"), crs = 4326)
+
+#Exploring listings in neighborhoods
+ggplot(listings, aes(x = fct_infreq(neighborhood_group), fill = type)) + 
+  geom_bar() + 
+  labs(title = "Listings per Neighborhood", x = "Neighborhood", y = "Number of Listings", fill = "Room Type") + 
+  coord_flip()
+```
+
+```{r EDA_comparisons_2, fig.width=10, fig.height=3.75, fig.cap="Violin plots of Entire Home/Apt and Private room against Price"}
+#Exploration of Price v Room Type
+room_type_violins <- ggplot(listings, aes(x = type, y = price)) + 
+  geom_violin() + 
+  scale_y_log10() + 
+  labs(y = "Price", x = "Room Type", title = "Price v Room type")
+```
+
+## Spatial Analysis EDA
+
+As expected, the location of the home also plays an important role in determining the price per night. Sorting by zipcode, the downtown area is generally more expensive than the other areas in King Country. We also see Lake City (categorized into "Northgate Area") in the north falls into the high average price as an outlier for zip codes in it's similar grouping. The area around SEATAC is the lowest average priced. (See Figure 8)  
+  
+\newpage
+  
+```{r EDA_Spatial}
+zip_prices <- listings %>% group_by(zipcode = zipcode) %>% summarise(avg_price = mean(price, na.rm = TRUE))
+colnames(zip_prices) <- c("region", "value")
+
+g_price_location <- zip_choropleth(zip_prices,
+                                   zip_zoom = zip_prices$region,
+                                   title = "Average Price by Region",
+                                   legend = "Average Price per Night") +
+  ggtitle("Expensiveness of Seattle's AirBnB's") + 
+  theme(plot.title = element_text(face = "bold")) + 
+  theme(plot.caption = element_text(color = "grey68")) + 
+  scale_color_gradient(low="#d3cbcb", high="#852eaa") + 
+  scale_fill_brewer("Average Price",palette=4)
+```
+
+# Exploring Data Relationships
+## Relation Between Superhost
+Comparing points and violin plots, there is no apparent relation between being a Super Host and the price per night of the AirBnB. The violin plots (Figure 4) appear to have mostly even means; the point plot also shows Super Hosts are interspersed with non-Super Hosts when grouped by neighborhood (Figure 5).
+
+
+```{r Jitter_Superhost, fig.width=10, fig.height=4.75, fig.cap="Violin plot overview of SuperHost pricing per neighborhood"}
+listings %>%
+  ggplot(aes(x = type, y = price, fill = superhost)) + 
+  geom_violin() + 
+  facet_wrap(~neighborhood_group) + 
+  coord_flip() + 
+  theme(axis.text.x = element_text(angle = -45, size = 7, hjust = -.1, vjust = .2)) + 
+  labs(x = "Price", y = "", title = "Price by Type of Room per Grouped Location", fill = "Super Host")
+
+fig_2 <- listings %>%
+  ggplot(aes(x = neighborhood_group, y = price_group, col = superhost)) +
+  geom_jitter(alpha = 0.5) +
+  labs(x = "Neighborhood Group", y = "Price", title = "Price Group vs Neighborhood Group", col = "Super Host") +
+  theme(axis.text.x = element_text(angle = -45, size = 9, hjust = .1, vjust = -.1))
+```
+
+```{r price_v_neighborhood, fig.width=10, fig.height=3.75, fig.cap="Point plot overview of SuperHost pricing per neighborhood"}
+listings %>%
+  ggplot(aes(x = neighborhood_group, y = price, col = superhost)) +   
+  geom_jitter(alpha = 0.5) + 
+  labs(x = "Neighborhood Group", y = "Price", title = "Price vs Neighborhood Group", col = "Super Host") + 
+  theme(axis.text.x = element_text(angle = -45, size = 9, hjust = 0, vjust = .5))
+```
+
+\newpage
+
+# Model Fitting
+
+In observation of how the model fit would behave, I used the Superhost, neighborhood group, and room type variables to predict the price as an outcome. The AIC and RMSE were quite high, even after fitting a lmer model to the raw price. To lower AIC and RMSE, the outcome was binned into 5 different groups (Figure 9). When fitting a model using these groups as an outcome; however, as observed in the binned plot (figure 2) most of the price data falls into the (0-200] range, therefore developing a model to predict the binned outcome would shed little light to our question. The log of the price was then taken as a variance stabilizing measure and two glm models were tested against a lmer model (seen in table 1).  
+\
+Predicting the log price (Figure 4) proved better for both our RMSE and the fit AIC, and a glm with call "logprice ~ neighborhood_group + rm_type" was chosen due to the lowest AIC and a simpler fit – Superhost was removed as a predictor because it was not detected as significant in determining the price of a listing. Checking our residuals and R2, we can observe that the residuals fall within normal range and that the model explains about 73% of the variance in our data.  
+
+```{r, fig.width=10, fig.height=3.75, fig.cap="Log price transformation of SuperHost pricing per neighborhood"}
+listings$logprice <- log(listings$price)
+listings %>%
+  ggplot(aes(x = neighborhood_group, y = logprice, col = superhost)) +   
+  geom_jitter(alpha = 0.5) + 
+  labs(x = "Neighborhood Group", y = "Log Price", title = "Price vs Neighborhood Group", col = "Super Host") + 
+  theme(axis.text.x = element_text(angle = -45, size = 9, hjust = 0, vjust = .5))
+```
+
+In an analysis of the coefficients, with a baseline intercept of exp(4.8) - the average price of a full house/apt in the Downtown Area. The other areas are generally less expensive, with the exception of the northern suburbs which are approximately the same, as seen by the summary, additionally private rooms are approximately exp(0.68) less than their whole house/apt equivalents. 
+Bootstrapping (figure 10) was done to test the coefficients and yielded that the true coefficients are close to the approximate. The full table of coefficients can be found in the appendix (table 1). These coefficients show the log relationship between our baseline Downtown full home/apt the other respective groupings. The residuals of our fit fall within normal guidelines per groups (Figures 6, 7)
+
+```{r model_fit, fig.width=10, fig.height=3.75}
+#test v train setup
+
+split <- sample.split(listings$price, SplitRatio = .7)
+train <- subset(listings, split == T)
+test <- subset(listings, split == F)
+
+#nonlog --------------------------------------
+# fit_1 <- glm(price ~neighborhood_group + type + superhost,
+#              data = listings)
+# AIC(fit_1)
+# pred_1 <- predict(fit_1, newdata = test, type = "response")
+# pred_1 <- ifelse(pred_1 > 0.5, 1, 0)
+# accuracy(test$price, pred_1)
+# 
+# fit_2 <- glm(price ~neighborhood_group + type,
+#              data = listings)
+# AIC(fit_2)
+# pred_2 <- predict(fit_2, newdata = test, type = "response")
+# pred_2 <- ifelse(pred_2 > 0.5, 1, 0)
+# accuracy(test$price, pred_2)
+# 
+# fit_3 <- lmer(price ~neighborhood_group + type + superhost + (1 | neighborhood_group),
+#              data = listings)
+# AIC(fit_3)
+# pred_3 <- predict(fit_3, newdata = test, type = "response")
+# pred_3 <- ifelse(pred_3 > 0.5, 1, 0)
+# accuracy(test$price, pred_3)
+
+#logprice -------------------------------------
+# 
+# fit_4 <- glm(logprice ~neighborhood_group + type + superhost,
+#              data = listings)
+# AIC(fit_4)
+# pred_4 <- predict(fit_4, newdata = test, type = "response")
+# pred_4 <- ifelse(pred_4 > 0.5, 1, 0)
+# accuracy(test$logprice, pred_4)
+# 
+fit_5 <- glm(logprice ~neighborhood_group + type,
+             data = listings)
+# AIC(fit_5)
+# pred_5 <- predict(fit_5, newdata = test, type = "response")
+# pred_5 <- ifelse(pred_5 > 0.5, 1, 0)
+# accuracy(test$logprice, pred_5)
+# 
+# fit_6 <- lmer(logprice ~ neighborhood_group + type + superhost + (1 | neighborhood_group),
+#              data = listings)
+# AIC(fit_6)
+# pred_6 <- predict(fit_6, newdata = test, type = "response")
+# pred_6 <- ifelse(pred_6 > 0.5, 1, 0)
+# accuracy(test$logprice, pred_6)
+# 
+# fit5_R2 <- sigma(fit_5)^2 / sd(listings$logprice)^2
+# plot(residuals(fit1), ylab = "Residuals")
+
+resids <- residuals(fit_5)
+listings$residuals <- resids
+
+neigh_resids <- listings %>%
+  ggplot(aes(x = neighborhood_group, y = resids)) + 
+  geom_violin() + 
+  labs(x = "", y = "Residuals", title = "Residuals per Neighborhood Group")
+
+type_resids <- listings %>%
+  ggplot(aes(x = type, y = resids)) + 
+  geom_violin() +  
+  labs(x = "", y = "Residuals", title = "Residuals per Room Type")
+
+
+
+boots <- function(formula, data, indices){
+  d <- data[indices, ]
+  fit <- glm(formula, data = d)
+  return(coef(fit))
+}
+
+boot_results <- boot(data = listings,
+                     statistic = boots,
+                     R = 1000,
+                     formula = logprice ~ neighborhood_group + type)
+
+```
+
+```{r, fig.width=10, fig.height=3.75, fig.cap="Residuals from selected fit, plotted by neighborhood"}
+neigh_resids
+```
+
+```{r, fig.width=10, fig.height=3.75, fig.cap="Residuals from selected fit, plotted by listing type"}
+type_resids
+```
+
+\newpage
+
+# Discussion
+Originally, I thought that location and type of room would be the most influential in determining the price of a room. After learning about the Superhost status, I thought this would also allow a host to increase the price of their listing as Superhosts are more likely to be featured in search results and promotional emails. I was surprised to see that the Superhost status had little effect in determining the price - a little further digging explained why.  
+\
+Superhosts are more likely to get featured and therefore attract more guests, so they often have less need to undercut their pricing to look for more visitors. As a hypothetical, someone is coming into Seattle for a convention. They want to stay in the Downtown area because of the proximity to the event, and they might be coming with a couple friends so splitting the cost for a whole apartment isn't too bad. The first few posts they see within the price range their searching for will be Superhosts because of priority, and their decision for one of the first couple listings is further confirmed by the "SUPERHOST" icon on the first image. Superhosts don't need to compete with price, because of their priority already nets them more on average.  
+
+\newpage
+
+# Appendix
+## Figures
+### Figure 1
+
+```{r fig_1, fig.width=10, fig.height=10, fig.cap="Average price per zipcode in King County"}
+g_price_location
+```
+
+\newpage
+
+### Figure 2
+
+```{r fig_2, , fig.width=10, fig.height=5, fig.cap="Binned prices per neighborhood"}
+fig_2
+```
+
+### Figure 3
+
+```{r fig_3, , fig.width=10, fig.height=3.75, fig.cap="Results of bootstrapping our fit 1000 times"}
+plot(boot_results)
+```
+
+\newpage
+
+```{r table_generation}
+tabl_1 <- "
+| Call                                                    | Fit AIC    | Fit RMSE  |
+|---------------------------------------------------------|------------|-----------|
+|Raw Price (GLM)                                          |------------|-----------|
+|price ~ neigh_grp + s_host + rm_type                     | 47766.52   | 139.69    |
+|price ~ neigh_grp + rm_type                              | 47775.94   | 139.69    |
+|Raw Price (LMER)                                         |------------|-----------|
+|price ~ neigh_grp + s_host + rm_type + (1 | neigh_grp)   | 47731.52   | 139.69    |
+|Log Price (GLM)                                          |------------|-----------|
+|logprice ~ neigh_grp + s_host + rm_type                  | 5412.14    | 3.70      |
+|logprice ~ neigh_grp + rm_type                           | 5410.19    | 3.70      |
+|Log Price (LMER)                                         |------------|-----------|
+|logprice ~ neigh_grp + rm_type + s_host + (1 | neigh_grp)| 5463.30    | 3.70      |
+"
+
+tabl_2 <- "
+| Predictor | Estimate | Std. Error |
+|-----------|----------|------------|
+|Intercept  | 4.844    | 0.011      |
+|Nor Suburb | 0.036    | 0.023      |
+|Northgate  | -0.153   | 0.025      |
+|Other      | -0.079   | 0.019      |
+|Southeast  | -0.087   | 0.030      |
+|Southwest  | -0.117   | 0.025      |
+|Private Rm | -0.684   | 0.018      |
+"
+```
+
+### Table 1
+```{r table_1}
+cat(tabl_1)
+```
+
+### Table 2
+
+```{r table_2}
+cat(tabl_2)
+```
+
+\newpage
+
+# Bibliography
+
+  Douglas Bates, Martin Maechler, Ben Bolker, Steve Walker (2015). Fitting Linear Mixed-Effects Models Using
+  lme4. Journal of Statistical Software, 67(1), 1-48. doi:10.18637/jss.v067.i01.  
+  \
+  Angelo Canty and Brian Ripley (2020). boot: Bootstrap R (S-Plus) Functions. R package version 1.3-25.  
+  \
+  Murray Cox. Inside Airbnb, adding data to the debate. http://insideairbnb.com/get-the-data.html  
+  \
+  Ari Lamstein (2015). choroplethrZip: Shapefile, metadata and visualization functions for US Zip Code
+  Tabulated Areas (ZCTAs).. https://github.com/arilamstein/choroplethrZip,
+  https://groups.google.com/forum/#!forum/choroplethr.  
+  \
+    Thomas Lin Pedersen and David Robinson (2020).
+  gganimate: A Grammar of Animated Graphics. R package
+  version 1.0.7.
+  https://CRAN.R-project.org/package=gganimate  
+  \
+  Hadley Wickham, Romain François, Lionel Henry and Kirill Müller (2020). dplyr: A Grammar of Data
+  Manipulation. R package version 1.0.2. https://CRAN.R-project.org/package=dplyr    
+  \
+  H. Wickham. ggplot2: Elegant Graphics for Data
+  Analysis. Springer-Verlag New York, 2016.  
+  \
+  Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software, 4(43), 1686,
+  https://doi.org/10.21105/joss.01686  
+  
